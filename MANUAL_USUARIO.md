@@ -250,14 +250,29 @@ En la pestaña **🗂️ Flashcards SM-2** (con contador de tarjetas pendientes 
 
 ---
 
-## 8. Ingesta de Materiales y PDFs del Curso (Apache PDFBox)
+## 8. Ingesta de Materiales, Descarga por URL y PDFs (Apache PDFBox & Web Crawler)
 
-En la pestaña **📑 Materiales & PDFBox**:
-1. Selecciona el **Tema Asociado** del desplegable.
-2. Escribe un **Título / Capítulo** identificativo.
-3. Selecciona cualquier archivo `.pdf` de tus apuntes o guías de HL7 FHIR.
+En la pestaña **📑 Materiales & PDFBox** dispones de dos modalidades de ingesta:
+
+### Modalidad A: Descargar e Indexar desde URL Web (ej: HL7 FHIR Spec)
+1. Activa la pestaña **`🌐 Importar desde URL`**.
+2. Introduce la URL web de la documentación (por ejemplo: `https://www.hl7.org/fhir/references.html` o un enlace a un `.pdf` remoto). Puedes pulsar **"Cargar Ejemplo"** para probar la URL de referencias oficial de HL7 FHIR.
+3. Asigna el **Tema del Syllabus** correspondiente y opcionalmente un título descriptivo.
+4. Pulsa **`📥 Descargar, Extraer e Indexar Contenido`**.
+5. El motor conectará a la web, descargará el recurso, limpiará cabeceras, scripts y elementos de navegación, extrayendo el contenido técnico puro e indexándolo en la base de datos con su enlace de referencia canónico.
+
+### Modalidad B: Carga de Archivos PDF Locales (Apache PDFBox)
+1. Activa la pestaña **`📁 Cargar PDF Local`**.
+2. Selecciona el **Tema Asociado** y escribe un **Título / Capítulo**.
+3. Selecciona cualquier archivo `.pdf` de tus apuntes o cursos.
 4. Pulsa **"Procesar e Indexar con PDFBox"**.
-5. El motor **Apache PDFBox 3.0** extraerá todo el texto del documento PDF, registrará el número total de páginas y lo almacenará indexado por tema para su consulta rápida dentro de la plataforma.
+5. El motor **Apache PDFBox 3.0** extraerá el texto íntegro preservando el flujo de párrafos y registrando el conteo de palabras.
+
+### Cómo Trabajar con los Materiales Indexados
+- **Buscador en tiempo real:** Escribe cualquier palabra clave en la barra superior para filtrar al instante qué documentos contienen ese concepto.
+- **Visor interactivo completo:** Pulsa **`📖 Leer Documento Completo`** para abrir el modal con el texto íntegro, conteo de palabras, enlace a la URL web original y botón **`📋 Copiar Texto`**.
+- **Práctica integrada:** Pulsa **`🎯 Practicar Preguntas del Tema`** para lanzar una sesión de examen focalizada en las preguntas vinculadas a ese material.
+- **Borrado:** Pulsa **`🗑️ Eliminar`** para suprimir materiales que ya no necesites.
 
 ---
 

@@ -554,14 +554,62 @@
                     <p class="text-sm text-slate-400">Sube PDFs de tus cursos para extraer su contenido e indexarlo junto a los temas oficiales.</p>
                 </div>
 
-                <!-- Upload Card -->
+                <!-- Upload & Import Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
-                    <h3 class="text-sm font-bold text-white uppercase tracking-wide">Cargar Nuevo PDF del Curso</h3>
-                    <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                        <div class="flex items-center gap-2">
+                            <button id="tab-mat-url-btn" type="button" onclick="switchMaterialInputMode('url')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer">
+                                🌐 Importar desde URL (ej: HL7 FHIR Spec)
+                            </button>
+                            <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                📁 Cargar PDF Local (PDFBox)
+                            </button>
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
+                    </div>
+
+                    <!-- Mode 1: URL Import Form -->
+                    <form id="import-url-form" onsubmit="importUrlMaterial(event)" class="space-y-4">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-semibold text-slate-300">URL del Documento o Especificación HL7 FHIR:</label>
+                            <div class="flex flex-col md:flex-row gap-2">
+                                <input id="import-mat-url" type="url" placeholder="https://www.hl7.org/fhir/references.html" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" required>
+                                <button type="button" onclick="loadSampleFhirUrl()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-blue-300 transition whitespace-nowrap cursor-pointer">
+                                    Cargar Ejemplo (hl7.org/fhir/references.html)
+                                </button>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Descarga, extrae el texto técnico e indexa automáticamente cualquier especificación o página web.</p>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
-                                <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                <select id="import-url-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título Personalizado (Opcional):</label>
+                                <input id="import-url-title" type="text" placeholder="Ej: HL7 FHIR R4 - References & Resolution" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 pt-1">
+                            <button id="btn-import-url-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/30">
+                                📥 Descargar, Extraer e Indexar Contenido
+                            </button>
+                            <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                <span class="animate-spin">⏳</span> Descargando y procesando la URL...
+                            </span>
+                        </div>
+                    </form>
+
+                    <!-- Mode 2: Local PDF Upload Form -->
+                    <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="hidden space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                                <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
@@ -572,11 +620,11 @@
                         </div>
 
                         <div>
-                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo PDF:</label>
-                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500" required>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo PDF Local:</label>
+                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500">
                         </div>
 
-                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition">
+                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
                             Procesar e Indexar con PDFBox
                         </button>
                     </form>
@@ -765,6 +813,8 @@
                         <span id="view-mat-topic" class="text-blue-400 font-semibold">Tema</span>
                         <span>•</span>
                         <span id="view-mat-words" class="font-mono text-emerald-400">0 palabras</span>
+                        <span>•</span>
+                        <a id="view-mat-link" href="#" target="_blank" class="hidden text-blue-400 hover:underline font-mono">Abrir URL Original ↗</a>
                     </div>
                 </div>
                 <button onclick="closeModal('modal-view-material')" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
@@ -787,6 +837,6 @@
     </div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.1"></script>
+    <script src="/app.js?v=2.0.2"></script>
 </body>
 </html>

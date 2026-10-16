@@ -47,6 +47,22 @@ public class StudyMaterialController {
         }
     }
 
+    @PostMapping("/url")
+    public ResponseEntity<?> importFromUrl(@RequestBody Map<String, Object> payload) {
+        try {
+            String url = (String) payload.get("url");
+            Long topicId = Long.valueOf(payload.get("topicId").toString());
+            String title = (String) payload.get("title");
+
+            StudyMaterial saved = studyMaterialService.extractAndSaveFromUrl(url, topicId, title);
+            return ResponseEntity.ok(saved);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error descargando o procesando la URL: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<StudyMaterial> getMaterial(@PathVariable Long id) {
         StudyMaterial m = studyMaterialService.getMaterialById(id);

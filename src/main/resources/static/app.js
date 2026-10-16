@@ -60,13 +60,13 @@ async function loadTopics() {
 }
 
 function populateTopicSelects() {
-    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select'];
+    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id'];
     selects.forEach(selectId => {
         const el = document.getElementById(selectId);
         if (!el) return;
         const firstOption = el.options[0];
         el.innerHTML = '';
-        if (firstOption && selectId !== 'upload-topic-id' && selectId !== 'new-q-topic-id') el.appendChild(firstOption);
+        if (firstOption && selectId !== 'upload-topic-id' && selectId !== 'new-q-topic-id' && selectId !== 'import-url-topic-id') el.appendChild(firstOption);
 
         allTopics.forEach(t => {
             const opt = document.createElement('option');
@@ -993,7 +993,15 @@ function renderMaterials(list) {
                 </div>
             </div>
             
-            <div class="text-xs text-blue-400 font-semibold">📁 Tema: ${topicName}</div>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-blue-400 font-semibold">📁 Tema: ${topicName}</span>
+                ${m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://')) ? `
+                    <span class="text-slate-600">•</span>
+                    <a href="${m.referenceUrlOrPage}" target="_blank" class="text-blue-400 hover:underline flex items-center gap-1 font-mono text-[11px]">
+                        🔗 ${m.referenceUrlOrPage.length > 55 ? m.referenceUrlOrPage.substring(0, 55) + '...' : m.referenceUrlOrPage} ↗
+                    </a>
+                ` : ''}
+            </div>
 
             <p class="text-xs text-slate-400 line-clamp-3 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 font-mono select-text">
                 ${m.contentText}
@@ -1031,6 +1039,14 @@ function openViewMaterialModal(id) {
     document.getElementById('view-mat-words').textContent = `${words} palabras extraídas`;
     document.getElementById('view-mat-content').textContent = mat.contentText;
 
+    const linkElem = document.getElementById('view-mat-link');
+    if (mat.referenceUrlOrPage && (mat.referenceUrlOrPage.startsWith('http://') || mat.referenceUrlOrPage.startsWith('https://'))) {
+        linkElem.href = mat.referenceUrlOrPage;
+        linkElem.classList.remove('hidden');
+    } else {
+        linkElem.classList.add('hidden');
+    }
+
     const practiceBtn = document.getElementById('view-mat-btn-practice');
     if (mat.topic && mat.topic.id) {
         practiceBtn.onclick = () => {
@@ -1063,6 +1079,87 @@ async function deleteMaterial(id) {
         }
     } catch (e) {
         console.error('Error eliminando material:', e);
+    }
+}
+
+function switchMaterialInputMode(mode) {
+    const urlForm = document.getElementById('import-url-form');
+    const pdfForm = document.getElementById('upload-pdf-form');
+    const urlBtn = document.getElementById('tab-mat-url-btn');
+    const pdfBtn = document.getElementById('tab-mat-pdf-btn');
+
+    if (mode === 'url') {
+        urlForm.classList.remove('hidden');
+        pdfForm.classList.add('hidden');
+        urlBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer';
+        pdfBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+    } else {
+        urlForm.classList.add('hidden');
+        pdfForm.classList.remove('hidden');
+        pdfBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white transition flex items-center gap-1.5 cursor-pointer';
+        urlBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+    }
+}
+
+function loadSampleFhirUrl() {
+    document.getElementById('import-mat-url').value = 'https://www.hl7.org/fhir/references.html';
+    document.getElementById('import-url-title').value = 'HL7 FHIR R4 - References & Resolution';
+    
+    // Auto-select topic 'RESOURCES' (ID 3) if available
+    const topicSelect = document.getElementById('import-url-topic-id');
+    for (let i = 0; i < topicSelect.options.length; i++) {
+        if (topicSelect.options[i].text.includes('Recursos') || topicSelect.options[i].value === '3') {
+            topicSelect.selectedIndex = i;
+            break;
+        }
+    }
+}
+
+async function importUrlMaterial(event) {
+    event.preventDefault();
+    const urlInput = document.getElementById('import-mat-url');
+    const topicSelect = document.getElementById('import-url-topic-id');
+    const titleInput = document.getElementById('import-url-title');
+    const statusSpan = document.getElementById('import-url-status');
+    const submitBtn = document.getElementById('btn-import-url-submit');
+
+    const url = urlInput.value.trim();
+    if (!url) {
+        alert('Por favor introduce una URL válida.');
+        return;
+    }
+
+    statusSpan.classList.remove('hidden');
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-50');
+
+    try {
+        const resp = await fetch('/api/materials/url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: url,
+                topicId: topicSelect.value,
+                title: titleInput.value.trim() || null
+            })
+        });
+
+        if (resp.ok) {
+            alert('¡Contenido descargado e indexado con éxito desde la URL!');
+            urlInput.value = '';
+            titleInput.value = '';
+            await loadMaterials();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            alert('Error descargando la URL: ' + (err.error || 'Verifica la URL y la conexión.'));
+        }
+    } catch (e) {
+        console.error('Error importando URL:', e);
+        alert('Error en la petición: ' + e.message);
+    } finally {
+        statusSpan.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50');
     }
 }
 
