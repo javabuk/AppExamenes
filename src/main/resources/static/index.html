@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>FHIR Cert Master - Preparación Oficial HL7 FHIR</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .tab-btn.active {
+            background-color: #3b82f6;
+            color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/80 sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20 font-bold text-lg text-white">
+                🔥
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    FHIR Cert Master
+                    <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">HAPI FHIR R4</span>
+                </h1>
+                <p class="text-xs text-slate-400">Plataforma Inteligente de Certificación HL7 FHIR</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button onclick="openNewExamModal()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm flex items-center gap-1.5">
+                <span>▶ Iniciar Examen</span>
+            </button>
+            <button onclick="loadDashboard()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">
+                ↻ Actualizar
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex flex-col md:flex-row">
+        <!-- Sidebar Navigation -->
+        <aside class="w-full md:w-64 bg-slate-800/40 border-r border-slate-800 p-4 space-y-1 shrink-0">
+            <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-2">Módulos de Estudio</div>
+            <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="tab-btn active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>📊</span> Panel & Readiness
+            </button>
+            <button onclick="switchTab('exam-modes')" id="btn-tab-exam-modes" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>📝</span> Modos de Examen
+            </button>
+            <button onclick="switchTab('search-builder')" id="btn-tab-search-builder" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>🔍</span> FHIR Search Builder
+            </button>
+            <button onclick="switchTab('resource-inspector')" id="btn-tab-resource-inspector" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>🔬</span> Inspector Recursos HAPI
+            </button>
+            <button onclick="switchTab('flashcards')" id="btn-tab-flashcards" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span class="flex items-center gap-1.5">⚡ Repetición SM-2 <span id="badge-due-count" class="hidden text-[10px] bg-amber-500 text-slate-900 font-bold px-1.5 py-0.2 rounded-full">0</span></span>
+            </button>
+            <button onclick="switchTab('questions')" id="btn-tab-questions" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>📚</span> Banco de Preguntas
+            </button>
+            <button onclick="switchTab('materials')" id="btn-tab-materials" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+                <span>📑</span> Materiales & PDFBox
+            </button>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto w-full">
+
+            <!-- SECTION: DASHBOARD -->
+            <section id="view-dashboard" class="space-y-6">
+                <!-- Top Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <!-- Readiness Score Card -->
+                    <div class="bg-gradient-to-br from-slate-800 to-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Readiness Score</div>
+                            <div class="text-3xl font-extrabold text-white mt-1 flex items-baseline gap-1">
+                                <span id="dash-readiness-score">0.0</span><span class="text-lg text-blue-400">%</span>
+                            </div>
+                            <div id="dash-readiness-badge" class="mt-2 inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-700 text-slate-300">
+                                Calculando...
+                            </div>
+                        </div>
+                        <div class="w-16 h-16 rounded-full border-4 border-blue-500/30 flex items-center justify-center text-xl font-bold text-blue-400">
+                            🎯
+                        </div>
+                    </div>
+
+                    <!-- Dominio de Preguntas -->
+                    <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Preguntas Dominadas</div>
+                        <div class="text-3xl font-extrabold text-white mt-1">
+                            <span id="dash-mastered-count">0</span><span class="text-sm font-normal text-slate-400"> / <span id="dash-total-questions">0</span></span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2">≥ 2 aciertos consecutivos en SM-2</p>
+                    </div>
+
+                    <!-- Errores Pendientes -->
+                    <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Buzón de Fallos</div>
+                        <div class="text-3xl font-extrabold text-rose-400 mt-1">
+                            <span id="dash-errors-count">0</span>
+                        </div>
+                        <button onclick="startExamWithMode('ERRORS')" class="text-xs text-rose-400 hover:text-rose-300 font-medium underline mt-2 block">
+                            Entrenar fallos ahora →
+                        </button>
+                    </div>
+
+                    <!-- Velocidad Media -->
+                    <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Velocidad y Fatiga</div>
+                        <div class="text-3xl font-extrabold text-amber-300 mt-1">
+                            <span id="dash-avg-time">0.0</span><span class="text-sm font-normal text-slate-400"> s/preg</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2">Promedio por respuesta</p>
+                    </div>
+                </div>
+
+                <!-- Mapa de Calor por Dominios Oficiales -->
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-6 shadow-md">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                🗺️ Mapa de Calor por Dominios Oficiales del Examen
+                            </h2>
+                            <p class="text-xs text-slate-400">Semáforo de preparación: Rojo (&lt;65%), Ámbar (65-79%), Verde (≥80% Umbral Seguro)</p>
+                        </div>
+                    </div>
+
+                    <div id="topics-heatmap-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Intentos Recientes -->
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-6 shadow-md">
+                    <h2 class="text-base font-bold text-white mb-3">🕒 Historial de Simulacros y Sesiones</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-300">
+                            <thead class="text-xs uppercase bg-slate-900/50 text-slate-400 border-b border-slate-700">
+                                <tr>
+                                    <th class="py-2.5 px-4">Modo</th>
+                                    <th class="py-2.5 px-4">Fecha</th>
+                                    <th class="py-2.5 px-4">Resultado</th>
+                                    <th class="py-2.5 px-4">Aciertos</th>
+                                    <th class="py-2.5 px-4">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-attempts-table" class="divide-y divide-slate-700/50">
+                                <tr><td colspan="5" class="py-4 text-center text-slate-500">No hay intentos registrados aún.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: EXAM MODES -->
+            <section id="view-exam-modes" class="hidden space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white">Modos de Examen y Entrenamiento</h2>
+                    <p class="text-sm text-slate-400">Selecciona la dinámica según tu objetivo de la sesión</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <!-- Modo 1: Simulacro Oficial -->
+                    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700/80 flex flex-col justify-between hover:border-blue-500/50 transition">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30">1. Cronometrado</span>
+                                <span class="text-xs text-slate-400">50 preguntas / 90 min</span>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mt-3">Simulacro Oficial (Exam Mode)</h3>
+                            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+                                Distribución idéntica a los pesos oficiales de HL7 FHIR. Sin retroalimentación hasta entregar, con opción para marcar preguntas dudosas con bandera (Flag) y gestión estricta del tiempo.
+                            </p>
+                        </div>
+                        <button onclick="startExamWithMode('SIMULATION')" class="mt-6 w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition shadow-lg shadow-blue-500/20">
+                            Iniciar Simulacro Oficial
+                        </button>
+                    </div>
+
+                    <!-- Modo 2: Entrenamiento Adaptativo -->
+                    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700/80 flex flex-col justify-between hover:border-amber-500/50 transition">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">2. Focalizado</span>
+                                <span class="text-xs text-slate-400">Algoritmo inteligente</span>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mt-3">Cazador de Puntos Débiles (Weak-Spot Hunter)</h3>
+                            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+                                Selecciona un 60% de preguntas de tus temas con menor tasa de acierto, un 25% de preguntas falladas anteriormente y un 15% de preguntas nuevas no vistas.
+                            </p>
+                        </div>
+                        <button onclick="startExamWithMode('ADAPTIVE')" class="mt-6 w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm transition shadow-lg shadow-amber-500/20">
+                            Iniciar Entrenamiento Adaptativo
+                        </button>
+                    </div>
+
+                    <!-- Modo 3: Modo Tutor -->
+                    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700/80 flex flex-col justify-between hover:border-emerald-500/50 transition">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">3. Didáctico</span>
+                                <span class="text-xs text-slate-400">Sin límite de tiempo</span>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mt-3">Modo Tutor (Instant Feedback)</h3>
+                            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+                                Al marcar una respuesta, despliega al instante la justificación oficial, la razón de por qué cada distractor es falso o verdadero, y el enlace directo al apartado de la especificación hl7.org/fhir.
+                            </p>
+                        </div>
+                        <button onclick="startExamWithMode('TUTOR')" class="mt-6 w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition shadow-lg shadow-emerald-500/20">
+                            Iniciar Modo Tutor
+                        </button>
+                    </div>
+
+                    <!-- Modo 4: Maratón de Fallos -->
+                    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700/80 flex flex-col justify-between hover:border-rose-500/50 transition">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">4. Repaso Urgente</span>
+                                <span class="text-xs text-slate-400">Error Inbox</span>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mt-3">Maratón de Fallos (Error Inbox)</h3>
+                            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+                                Test rápido compuesto exclusivamente por preguntas que has fallado al menos una vez y que aún no has acertado 2 veces consecutivas en repetición espaciada.
+                            </p>
+                        </div>
+                        <button onclick="startExamWithMode('ERRORS')" class="mt-6 w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm transition shadow-lg shadow-rose-500/20">
+                            Iniciar Maratón de Fallos
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: ACTIVE EXAM (Runner) -->
+            <section id="view-exam-runner" class="hidden space-y-6">
+                <!-- Exam Top Bar -->
+                <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span id="runner-mode-badge" class="px-2 py-0.5 text-xs font-bold rounded bg-blue-500/20 text-blue-400">SIMULATION</span>
+                            <span class="text-xs text-slate-400">Pregunta <span id="runner-current-idx">1</span> de <span id="runner-total-count">10</span></span>
+                        </div>
+                        <div class="text-sm font-semibold text-slate-300 mt-0.5" id="runner-topic-name">Tema</div>
+                    </div>
+
+                    <!-- Timer & Flag -->
+                    <div class="flex items-center gap-4">
+                        <button onclick="toggleFlagCurrentQuestion()" id="runner-flag-btn" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition flex items-center gap-1.5">
+                            🚩 <span>Duda (Flag)</span>
+                        </button>
+                        <div class="bg-slate-900 px-3.5 py-1.5 rounded-lg border border-slate-700 font-mono text-sm font-bold text-amber-300 flex items-center gap-2">
+                            ⏱️ <span id="runner-timer">00:00</span>
+                        </div>
+                        <button onclick="confirmSubmitExam()" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm">
+                            Entregar Examen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Question Body Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-6">
+                    <div class="text-base md:text-lg font-semibold text-white leading-relaxed" id="runner-stem">
+                        Cargando enunciado...
+                    </div>
+
+                    <!-- Optional Code Snippet -->
+                    <div id="runner-snippet-container" class="hidden">
+                        <div class="text-xs font-mono text-slate-400 mb-1">Snippet FHIR:</div>
+                        <pre id="runner-snippet" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap"></pre>
+                    </div>
+
+                    <!-- Options List -->
+                    <div id="runner-options-list" class="space-y-3">
+                        <!-- Options generated dynamically -->
+                    </div>
+
+                    <!-- Tutor Feedback Box (Only displayed in Tutor mode upon answer selection) -->
+                    <div id="runner-tutor-feedback" class="hidden p-4 rounded-xl bg-slate-900 border border-blue-500/30 space-y-2">
+                        <div class="text-xs font-bold text-blue-400 uppercase tracking-wide">💡 Justificación Oficial HL7 FHIR</div>
+                        <p id="runner-tutor-explanation" class="text-xs text-slate-300 leading-relaxed"></p>
+                        <a id="runner-tutor-link" href="#" target="_blank" class="text-xs text-blue-400 hover:underline block pt-1">
+                            Ver sección en hl7.org/fhir →
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Navigation Controls & Grid -->
+                <div class="flex items-center justify-between">
+                    <button onclick="prevQuestion()" id="runner-prev-btn" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition disabled:opacity-40">
+                        ← Anterior
+                    </button>
+                    
+                    <!-- Question Numbers Quick Grid -->
+                    <div id="runner-question-grid" class="flex flex-wrap gap-1.5 justify-center max-w-md">
+                        <!-- Question badges generated dynamically -->
+                    </div>
+
+                    <button onclick="nextQuestion()" id="runner-next-btn" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition disabled:opacity-40">
+                        Siguiente →
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION: EXAM RESULT -->
+            <section id="view-exam-result" class="hidden space-y-6">
+                <!-- Result Summary Header -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center space-y-3">
+                    <div id="result-status-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        APROBADO
+                    </div>
+                    <div class="text-5xl font-extrabold text-white">
+                        <span id="result-score-percent">0.0</span><span class="text-2xl text-slate-400">%</span>
+                    </div>
+                    <p class="text-sm text-slate-300">
+                        Has acertado <strong id="result-correct-count" class="text-white">0</strong> de <strong id="result-total-count" class="text-white">0</strong> preguntas en <span id="result-duration" class="font-mono text-amber-300">0 min</span>.
+                    </p>
+                    <div class="flex justify-center gap-3 pt-2">
+                        <button onclick="switchTab('dashboard')" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition">
+                            Volver al Panel
+                        </button>
+                        <button onclick="switchTab('exam-modes')" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+                            Nuevo Examen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Detailed Answers Review -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold text-white">Desglose Detallado por Pregunta</h3>
+                    <div id="result-reviews-container" class="space-y-4">
+                        <!-- Generated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: FHIR SEARCH BUILDER -->
+            <section id="view-search-builder" class="hidden space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        🔍 Entrenador de Búsqueda RESTful FHIR
+                    </h2>
+                    <p class="text-sm text-slate-400">Practica la construcción y validación sintáctica de peticiones GET de búsqueda con parámetros y modificadores oficiales.</p>
+                </div>
+
+                <!-- Challenge presets -->
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 space-y-2">
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Desafíos de Certificación FHIR:</div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="loadSearchChallenge(1)" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
+                            1. Observation Glucosa + _include Patient
+                        </button>
+                        <button onclick="loadSearchChallenge(2)" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
+                            2. Patient nombre exacto (:exact)
+                        </button>
+                        <button onclick="loadSearchChallenge(3)" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
+                            3. Condition activa con :missing
+                        </button>
+                        <button onclick="loadSearchChallenge(4)" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
+                            4. Inclusión inversa (_revinclude)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input form -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Tipo de Recurso Esperado:</label>
+                        <input id="search-expected-type" type="text" value="Observation" class="w-full max-w-xs bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Cadena de Consulta FHIR REST:</label>
+                        <div class="flex gap-2">
+                            <input id="search-query-input" type="text" placeholder="GET [base]/Observation?code=http://loinc.org|15074-8&status=final&_include=Observation:subject" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-blue-500">
+                            <button onclick="validateSearchQuery()" class="px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+                                Validar con HAPI FHIR
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Results Output -->
+                    <div id="search-validation-output" class="hidden p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: RESOURCE INSPECTOR -->
+            <section id="view-resource-inspector" class="hidden space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        🔬 Inspector y Validador de Recursos HAPI FHIR
+                    </h2>
+                    <p class="text-sm text-slate-400">Inspecciona y valida instancias de recursos JSON según las reglas de cardinalidad y tipos de FHIR R4.</p>
+                </div>
+
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 flex flex-wrap gap-2">
+                    <span class="text-xs text-slate-400 self-center mr-2">Cargar Ejemplo:</span>
+                    <button onclick="loadSampleResource('patient')" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-mono">Patient Válido</button>
+                    <button onclick="loadSampleResource('observation_error')" class="px-3 py-1.5 text-xs rounded-lg bg-rose-900/40 border border-rose-700/50 hover:bg-rose-800/50 text-rose-300 font-mono">Observation con Error (Falta Status)</button>
+                    <button onclick="loadSampleResource('bundle')" class="px-3 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-mono">Bundle Transaction</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="block text-xs font-semibold text-slate-400">JSON de Entrada:</label>
+                        <textarea id="resource-json-input" rows="16" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
+                        <button onclick="validateResourceJson()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition">
+                            Validar con Parser HAPI FHIR R4
+                        </button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-xs font-semibold text-slate-400">Resultado de Análisis:</label>
+                        <div id="resource-validation-output" class="bg-slate-950 border border-slate-700 rounded-xl p-4 min-h-[300px] text-xs font-mono text-slate-300 overflow-y-auto">
+                            Ingresa un recurso JSON y pulsa "Validar".
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: FLASHCARDS (SM-2) -->
+            <section id="view-flashcards" class="hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            ⚡ Repetición Espaciada (Algoritmo SM-2)
+                        </h2>
+                        <p class="text-sm text-slate-400">Repasa conceptos difíciles y consolida preguntas para retención a largo plazo.</p>
+                    </div>
+                    <div class="text-xs bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-slate-300">
+                        Pendientes hoy: <strong id="flashcard-due-number" class="text-amber-400 font-bold">0</strong>
+                    </div>
+                </div>
+
+                <!-- Flashcard Display Box -->
+                <div id="flashcard-box" class="max-w-2xl mx-auto bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl space-y-6">
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span id="fc-topic-name" class="font-semibold text-blue-400">Tema</span>
+                        <span>Intervalo actual: <span id="fc-interval" class="font-mono text-white">1</span> d (EF: <span id="fc-ef" class="font-mono text-white">2.5</span>)</span>
+                    </div>
+
+                    <div id="fc-stem" class="text-lg font-semibold text-white leading-relaxed">
+                        Cargando tarjeta...
+                    </div>
+
+                    <pre id="fc-snippet" class="hidden bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 whitespace-pre-wrap"></pre>
+
+                    <!-- Hidden Back Face -->
+                    <div id="fc-back-face" class="hidden pt-4 border-t border-slate-700 space-y-4">
+                        <div class="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30">
+                            <div class="text-xs font-bold text-emerald-400 uppercase tracking-wide">Respuesta Correcta:</div>
+                            <div id="fc-correct-text" class="text-sm font-semibold text-white mt-1"></div>
+                        </div>
+
+                        <div class="text-xs text-slate-300 leading-relaxed" id="fc-explanation"></div>
+
+                        <a id="fc-link" href="#" target="_blank" class="text-xs text-blue-400 hover:underline block">
+                            Ver sección en hl7.org/fhir →
+                        </a>
+
+                        <!-- SM-2 Rating Buttons -->
+                        <div class="pt-4">
+                            <div class="text-xs font-semibold text-slate-400 mb-2 text-center">¿Con qué facilidad lo recordaste?</div>
+                            <div class="grid grid-cols-6 gap-1.5">
+                                <button onclick="rateFlashcard(0)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-rose-900/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">0</div>
+                                    <div class="text-[9px] text-slate-400">Olvido</div>
+                                </button>
+                                <button onclick="rateFlashcard(1)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-rose-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">1</div>
+                                    <div class="text-[9px] text-slate-400">Error</div>
+                                </button>
+                                <button onclick="rateFlashcard(2)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-amber-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">2</div>
+                                    <div class="text-[9px] text-slate-400">Difícil</div>
+                                </button>
+                                <button onclick="rateFlashcard(3)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-blue-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">3</div>
+                                    <div class="text-[9px] text-slate-400">Bueno</div>
+                                </button>
+                                <button onclick="rateFlashcard(4)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-emerald-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">4</div>
+                                    <div class="text-[9px] text-slate-400">Fácil</div>
+                                </button>
+                                <button onclick="rateFlashcard(5)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-teal-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
+                                    <div class="text-xs font-bold">5</div>
+                                    <div class="text-[9px] text-slate-400">Perfecto</div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="fc-flip-btn" onclick="flipFlashcard()" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition">
+                        Mostrar Solución y Explicación
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION: QUESTION BANK -->
+            <section id="view-questions" class="hidden space-y-6">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            📚 Banco de Preguntas FHIR
+                        </h2>
+                        <p class="text-sm text-slate-400">Explora preguntas, genera variantes espejo "Clone & Twist" e importa bancos JSON.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openCreateTopicModal()" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">
+                            + Nuevo Tema
+                        </button>
+                        <button onclick="openCreateQuestionModal()" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+                            + Nueva Pregunta
+                        </button>
+                        <button onclick="openImportModal()" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition">
+                            📥 Importar JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="flex flex-wrap gap-3">
+                    <input id="q-search-input" type="text" placeholder="Buscar por palabra clave..." oninput="filterQuestions()" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-64">
+                    <select id="q-topic-select" onchange="filterQuestions()" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500">
+                        <option value="">Todos los Temas</option>
+                    </select>
+                </div>
+
+                <!-- Questions List -->
+                <div id="questions-list-container" class="space-y-3">
+                    <!-- Loaded dynamically -->
+                </div>
+            </section>
+
+            <!-- SECTION: MATERIALS & PDFBOX -->
+            <section id="view-materials" class="hidden space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        📑 Materiales de Estudio e Ingesta de PDFs (Apache PDFBox)
+                    </h2>
+                    <p class="text-sm text-slate-400">Sube PDFs de tus cursos para extraer su contenido e indexarlo junto a los temas oficiales.</p>
+                </div>
+
+                <!-- Upload Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wide">Cargar Nuevo PDF del Curso</h3>
+                    <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                                <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título / Capítulo:</label>
+                                <input id="upload-title" type="text" placeholder="Ej: Módulo 2 - REST y Búsquedas" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo PDF:</label>
+                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500" required>
+                        </div>
+
+                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition">
+                            Procesar e Indexar con PDFBox
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Materials List & Search -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-5">
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-700/80 pb-5">
+                        <div>
+                            <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                📑 Apuntes y Documentación Indexada
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-1">Busca cualquier concepto técnico o clínico dentro del texto íntegro extraído de tus PDFs.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                            <div class="relative flex-1 md:w-80">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">🔍</span>
+                                <input id="mat-search-input" type="text" placeholder="Buscar en el texto de los PDFs..." oninput="filterMaterials()" class="w-full bg-slate-900 border border-slate-600 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-inner">
+                            </div>
+                            <select id="mat-topic-select" onchange="filterMaterials()" class="bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                                <option value="">Todos los Temas</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="materials-container" class="space-y-4">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Iniciar Examen Personalizado -->
+    <div id="modal-new-exam" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 class="text-lg font-bold text-white">Configurar Sesión de Examen</h3>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Modo de Examen:</label>
+                    <select id="modal-exam-mode" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white">
+                        <option value="SIMULATION">1. Simulacro Oficial (Ponderado y Cronometrado)</option>
+                        <option value="ADAPTIVE">2. Cazador de Puntos Débiles (Adaptativo)</option>
+                        <option value="TUTOR">3. Modo Tutor (Feedback Inmediato)</option>
+                        <option value="ERRORS">4. Maratón de Fallos (Error Inbox)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Número de Preguntas:</label>
+                    <input id="modal-question-count" type="number" value="10" min="5" max="50" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Filtrar por Tema (Opcional):</label>
+                    <select id="modal-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white">
+                        <option value="">Todos los temas (Ponderación Oficial)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-exam')" class="px-4 py-2 text-xs rounded-lg bg-slate-700 text-slate-300">Cancelar</button>
+                <button onclick="executeStartModalExam()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white">Comenzar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Crear Nuevo Tema -->
+    <div id="modal-create-topic" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 class="text-lg font-bold text-white">Añadir Nuevo Tema al Syllabus</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Código Único (Ej: FHIRPATH):</label>
+                    <input id="new-topic-code" type="text" placeholder="FHIRPATH" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white uppercase">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Nombre del Tema:</label>
+                    <input id="new-topic-name" type="text" placeholder="Expresiones FHIRPath y Operaciones Extendidas" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Peso en el Examen (%):</label>
+                    <input id="new-topic-weight" type="number" step="0.5" value="10" min="1" max="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-create-topic')" class="px-4 py-2 text-xs rounded-lg bg-slate-700 text-slate-300">Cancelar</button>
+                <button onclick="submitCreateTopic()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">Guardar Tema</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Crear Nueva Pregunta -->
+    <div id="modal-create-question" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-white">Crear Nueva Pregunta</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Tema:</label>
+                    <select id="new-q-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Dificultad:</label>
+                    <select id="new-q-difficulty" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+                        <option value="1">1 - Básico</option>
+                        <option value="2" selected>2 - Nivel Examen Oficial</option>
+                        <option value="3">3 - Avanzado / Arquitecto</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Enunciado de la Pregunta (Stem):</label>
+                <textarea id="new-q-stem" rows="2" placeholder="Escribe el escenario clínico o técnico..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Fragmento de Código / URL FHIR (Opcional):</label>
+                <textarea id="new-q-snippet" rows="2" placeholder="GET [base]/Observation?code=..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-mono text-emerald-400"></textarea>
+            </div>
+            <div class="space-y-2 border-t border-slate-700 pt-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-300">Opciones de Respuesta (Marca la correcta):</span>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <input type="radio" name="new-q-correct" value="A" checked class="col-span-1">
+                    <span class="col-span-1 text-xs font-bold text-white">A.</span>
+                    <input id="new-q-opt-a" type="text" placeholder="Texto de la opción A" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white">
+                    <input id="new-q-why-a" type="text" placeholder="Razón de acierto/distractor (opcional)" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-400">
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <input type="radio" name="new-q-correct" value="B" class="col-span-1">
+                    <span class="col-span-1 text-xs font-bold text-white">B.</span>
+                    <input id="new-q-opt-b" type="text" placeholder="Texto de la opción B" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white">
+                    <input id="new-q-why-b" type="text" placeholder="Razón de acierto/distractor (opcional)" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-400">
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <input type="radio" name="new-q-correct" value="C" class="col-span-1">
+                    <span class="col-span-1 text-xs font-bold text-white">C.</span>
+                    <input id="new-q-opt-c" type="text" placeholder="Texto de la opción C" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white">
+                    <input id="new-q-why-c" type="text" placeholder="Razón de acierto/distractor (opcional)" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-400">
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <input type="radio" name="new-q-correct" value="D" class="col-span-1">
+                    <span class="col-span-1 text-xs font-bold text-white">D.</span>
+                    <input id="new-q-opt-d" type="text" placeholder="Texto de la opción D" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white">
+                    <input id="new-q-why-d" type="text" placeholder="Razón de acierto/distractor (opcional)" class="col-span-5 bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-400">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Explicación Detallada:</label>
+                <textarea id="new-q-explanation" rows="2" placeholder="Justificación oficial según el estándar FHIR R4..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">URL Especificación HL7 FHIR (Opcional):</label>
+                <input id="new-q-url" type="text" placeholder="https://hl7.org/fhir/R4/search.html" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-create-question')" class="px-4 py-2 text-xs rounded-lg bg-slate-700 text-slate-300">Cancelar</button>
+                <button onclick="submitCreateQuestion()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white">Guardar Pregunta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Importar Preguntas JSON -->
+    <div id="modal-import-json" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Importación Masiva de Preguntas (JSON)</h3>
+                <button onclick="loadSampleImportJson()" class="text-xs text-blue-400 hover:underline">Cargar Plantilla de Ejemplo</button>
+            </div>
+            <textarea id="import-json-textarea" rows="12" placeholder="Pega aquí el array JSON de preguntas..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-emerald-400"></textarea>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-import-json')" class="px-4 py-2 text-xs rounded-lg bg-slate-700 text-slate-300">Cancelar</button>
+                <button onclick="submitImportJson()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">Importar Ahora</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Visor Completo de Material / PDF -->
+    <div id="modal-view-material" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-3xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                <div>
+                    <h3 id="view-mat-title" class="text-lg font-bold text-white">Título del Documento</h3>
+                    <div class="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                        <span id="view-mat-topic" class="text-blue-400 font-semibold">Tema</span>
+                        <span>•</span>
+                        <span id="view-mat-words" class="font-mono text-emerald-400">0 palabras</span>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-view-material')" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+            </div>
+            <div class="flex-1 overflow-y-auto bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed select-text" id="view-mat-content">
+                Cargando texto extraído con Apache PDFBox...
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-700">
+                <div class="flex gap-2">
+                    <button id="view-mat-btn-practice" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+                        🎯 Practicar este Tema
+                    </button>
+                    <button id="view-mat-btn-copy" onclick="copyMaterialText()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">
+                        📋 Copiar Texto
+                    </button>
+                </div>
+                <button onclick="closeModal('modal-view-material')" class="px-4 py-1.5 text-xs rounded-lg bg-slate-700 text-slate-300">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Logic Script -->
+    <script src="/app.js?v=2.0.1"></script>
+</body>
+</html>

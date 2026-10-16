@@ -1,0 +1,95 @@
+# ==============================================================================
+# Java & Maven Build Output
+# ==============================================================================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# ==============================================================================
+# Base de Datos Local SQLite & Runtime Data
+# ==============================================================================
+data/*
+!data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+
+# ==============================================================================
+# Logs & Salidas de Ejecución
+# ==============================================================================
+logs/
+*.log
+*.log.*
+nohup.out
+
+# ==============================================================================
+# JVM Crash Dumps & Profiling
+# ==============================================================================
+hs_err_pid*
+replay_pid*
+
+# ==============================================================================
+# IDEs & Editores de Código
+# ==============================================================================
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbproject/genfiles.properties
+
+# ==============================================================================
+# Archivos de Sistema Operativo
+# ==============================================================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+
+# ==============================================================================
+# Archivos Temporales
+# ==============================================================================
+tmp/
+temp/
+*.tmp
+*.bak
