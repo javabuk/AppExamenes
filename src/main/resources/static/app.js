@@ -984,6 +984,10 @@ function renderMaterials(list) {
         const topicName = m.topic ? m.topic.name : 'General';
         const topicId = m.topic ? m.topic.id : null;
 
+        // Extract a clean, single-paragraph preview excerpt (max 240 chars)
+        const cleanContent = (m.contentText || '').trim().replace(/\s+/g, ' ');
+        const excerpt = cleanContent.length > 240 ? cleanContent.substring(0, 240) + '...' : cleanContent;
+
         card.innerHTML = `
             <div class="flex items-center justify-between text-xs">
                 <span class="font-bold text-white text-sm">${m.title}</span>
@@ -1003,9 +1007,9 @@ function renderMaterials(list) {
                 ` : ''}
             </div>
 
-            <p class="text-xs text-slate-400 line-clamp-3 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 font-mono select-text">
-                ${m.contentText}
-            </p>
+            <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed overflow-hidden">
+                ${excerpt || '<span class="text-slate-500 italic">(Sin contenido textual disponible)</span>'}
+            </div>
 
             <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800 text-xs">
                 <div class="flex flex-wrap items-center gap-2">
