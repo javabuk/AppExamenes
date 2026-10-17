@@ -9,39 +9,105 @@
     <title>FHIR Cert Master - Preparación Oficial HL7 FHIR</title>
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            letter-spacing: -0.011em;
+            -webkit-font-smoothing: antialiased;
+        }
+        code, pre, .font-mono {
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        /* Impeccable Custom Sleek Scrollbar */
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.7);
+            border-radius: 9999px;
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.9);
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+
+        /* Impeccable Tab Button Transition */
+        .tab-btn {
+            position: relative;
+            transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+        }
         .tab-btn.active {
-            background-color: #3b82f6;
+            background-color: rgba(37, 99, 235, 0.18);
             color: #ffffff;
-            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+            border-left: 3px solid #3b82f6;
+            font-weight: 600;
+        }
+
+        /* Modal Dialog Animation */
+        @keyframes modalEnter {
+            from {
+                opacity: 0;
+                transform: scale(0.97) translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        .modal-box {
+            animation: modalEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Toast Animation */
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100%) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+        }
+        .toast-item {
+            animation: toastSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-blue-500/30 selection:text-blue-200">
 
     <!-- Top Navigation Bar -->
-    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/80 sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20 font-bold text-lg text-white">
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3.5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 font-bold text-lg text-white">
                 🔥
             </div>
             <div>
-                <h1 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <h1 class="text-base md:text-lg font-bold text-white tracking-tight flex items-center gap-2">
                     FHIR Cert Master
-                    <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">HAPI FHIR R4</span>
+                    <span class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full font-mono font-medium">HAPI FHIR R4</span>
                 </h1>
                 <p class="text-xs text-slate-400">Plataforma Inteligente de Certificación HL7 FHIR</p>
             </div>
         </div>
 
         <div class="flex items-center space-x-3">
-            <button onclick="openNewExamModal()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm flex items-center gap-1.5">
+            <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 font-mono">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>API Conectada</span>
+            </div>
+            <button onclick="openNewExamModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition shadow-sm shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer">
                 <span>▶ Iniciar Examen</span>
             </button>
-            <button onclick="loadDashboard()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">
+            <button onclick="loadDashboard()" class="px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-300 border border-slate-700/80 transition cursor-pointer">
                 ↻ Actualizar
             </button>
         </div>
@@ -49,27 +115,30 @@
 
     <div class="flex-1 flex flex-col md:flex-row">
         <!-- Sidebar Navigation -->
-        <aside class="w-full md:w-64 bg-slate-800/40 border-r border-slate-800 p-4 space-y-1 shrink-0">
-            <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-2">Módulos de Estudio</div>
-            <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="tab-btn active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+        <aside class="w-full md:w-64 bg-slate-900/50 border-r border-slate-800/80 p-4 space-y-1 shrink-0">
+            <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">Módulos de Estudio</div>
+            <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="tab-btn active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📊</span> Panel & Readiness
             </button>
-            <button onclick="switchTab('exam-modes')" id="btn-tab-exam-modes" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+            <button onclick="switchTab('exam-modes')" id="btn-tab-exam-modes" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📝</span> Modos de Examen
             </button>
-            <button onclick="switchTab('search-builder')" id="btn-tab-search-builder" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+            <button onclick="switchTab('search-builder')" id="btn-tab-search-builder" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>🔍</span> FHIR Search Builder
             </button>
-            <button onclick="switchTab('resource-inspector')" id="btn-tab-resource-inspector" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+            <button onclick="switchTab('resource-inspector')" id="btn-tab-resource-inspector" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>🔬</span> Inspector Recursos HAPI
             </button>
-            <button onclick="switchTab('flashcards')" id="btn-tab-flashcards" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
-                <span class="flex items-center gap-1.5">⚡ Repetición SM-2 <span id="badge-due-count" class="hidden text-[10px] bg-amber-500 text-slate-900 font-bold px-1.5 py-0.2 rounded-full">0</span></span>
+            <button onclick="switchTab('flashcards')" id="btn-tab-flashcards" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                <span class="flex items-center justify-between w-full">
+                    <span class="flex items-center gap-2"><span>⚡</span> Repetición SM-2</span>
+                    <span id="badge-due-count" class="hidden text-[10px] bg-amber-500 text-slate-950 font-bold px-2 py-0.5 rounded-full">0</span>
+                </span>
             </button>
-            <button onclick="switchTab('questions')" id="btn-tab-questions" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+            <button onclick="switchTab('questions')" id="btn-tab-questions" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📚</span> Banco de Preguntas
             </button>
-            <button onclick="switchTab('materials')" id="btn-tab-materials" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-left text-slate-300 hover:bg-slate-700/50">
+            <button onclick="switchTab('materials')" id="btn-tab-materials" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📑</span> Materiales & PDFBox
             </button>
         </aside>
@@ -446,66 +515,86 @@
                 </div>
 
                 <!-- Flashcard Display Box -->
-                <div id="flashcard-box" class="max-w-2xl mx-auto bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl space-y-6">
-                    <div class="flex items-center justify-between text-xs text-slate-400">
-                        <span id="fc-topic-name" class="font-semibold text-blue-400">Tema</span>
-                        <span>Intervalo actual: <span id="fc-interval" class="font-mono text-white">1</span> d (EF: <span id="fc-ef" class="font-mono text-white">2.5</span>)</span>
-                    </div>
-
-                    <div id="fc-stem" class="text-lg font-semibold text-white leading-relaxed">
-                        Cargando tarjeta...
-                    </div>
-
-                    <pre id="fc-snippet" class="hidden bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 whitespace-pre-wrap"></pre>
-
-                    <!-- Hidden Back Face -->
-                    <div id="fc-back-face" class="hidden pt-4 border-t border-slate-700 space-y-4">
-                        <div class="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30">
-                            <div class="text-xs font-bold text-emerald-400 uppercase tracking-wide">Respuesta Correcta:</div>
-                            <div id="fc-correct-text" class="text-sm font-semibold text-white mt-1"></div>
+                <!-- Flashcard Display Box -->
+                <div id="flashcard-box" class="max-w-2xl mx-auto bg-slate-900/80 p-8 rounded-3xl border border-slate-800 shadow-2xl relative">
+                    <!-- Active Card State -->
+                    <div id="fc-card-content" class="space-y-6">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span id="fc-topic-name" class="font-semibold text-blue-400">Tema</span>
+                            <span class="bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700/60 font-mono text-[11px]">Intervalo: <span id="fc-interval" class="text-white font-bold">1</span>d (EF: <span id="fc-ef" class="text-white font-bold">2.5</span>)</span>
                         </div>
 
-                        <div class="text-xs text-slate-300 leading-relaxed" id="fc-explanation"></div>
+                        <div id="fc-stem" class="text-base md:text-lg font-medium text-white leading-relaxed">
+                            Cargando tarjeta...
+                        </div>
 
-                        <a id="fc-link" href="#" target="_blank" class="text-xs text-blue-400 hover:underline block">
-                            Ver sección en hl7.org/fhir →
-                        </a>
+                        <pre id="fc-snippet" class="hidden bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 whitespace-pre-wrap"></pre>
 
-                        <!-- SM-2 Rating Buttons -->
-                        <div class="pt-4">
-                            <div class="text-xs font-semibold text-slate-400 mb-2 text-center">¿Con qué facilidad lo recordaste?</div>
-                            <div class="grid grid-cols-6 gap-1.5">
-                                <button onclick="rateFlashcard(0)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-rose-900/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">0</div>
-                                    <div class="text-[9px] text-slate-400">Olvido</div>
-                                </button>
-                                <button onclick="rateFlashcard(1)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-rose-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">1</div>
-                                    <div class="text-[9px] text-slate-400">Error</div>
-                                </button>
-                                <button onclick="rateFlashcard(2)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-amber-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">2</div>
-                                    <div class="text-[9px] text-slate-400">Difícil</div>
-                                </button>
-                                <button onclick="rateFlashcard(3)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-blue-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">3</div>
-                                    <div class="text-[9px] text-slate-400">Bueno</div>
-                                </button>
-                                <button onclick="rateFlashcard(4)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-emerald-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">4</div>
-                                    <div class="text-[9px] text-slate-400">Fácil</div>
-                                </button>
-                                <button onclick="rateFlashcard(5)" class="p-2 text-center rounded-lg bg-slate-900 hover:bg-teal-800/60 border border-slate-700 text-slate-300 hover:text-white transition">
-                                    <div class="text-xs font-bold">5</div>
-                                    <div class="text-[9px] text-slate-400">Perfecto</div>
-                                </button>
+                        <!-- Hidden Back Face -->
+                        <div id="fc-back-face" class="hidden pt-4 border-t border-slate-800 space-y-4">
+                            <div class="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30">
+                                <div class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Respuesta Correcta:</div>
+                                <div id="fc-correct-text" class="text-sm font-semibold text-white mt-1"></div>
+                            </div>
+
+                            <div class="text-xs text-slate-300 leading-relaxed" id="fc-explanation"></div>
+
+                            <a id="fc-link" href="#" target="_blank" class="text-xs text-blue-400 hover:underline inline-flex items-center gap-1 font-mono">
+                                <span>Ver sección en hl7.org/fhir</span> ↗
+                            </a>
+
+                            <!-- SM-2 Rating Buttons -->
+                            <div class="pt-4 border-t border-slate-800/80">
+                                <div class="text-xs font-medium text-slate-400 mb-2.5 text-center">¿Con qué facilidad lo recordaste? (Algoritmo SM-2)</div>
+                                <div class="grid grid-cols-6 gap-2">
+                                    <button onclick="rateFlashcard(0)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-rose-950/70 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-rose-400">0</div>
+                                        <div class="text-[9px] text-slate-400">Olvido</div>
+                                    </button>
+                                    <button onclick="rateFlashcard(1)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-rose-900/60 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-rose-400">1</div>
+                                        <div class="text-[9px] text-slate-400">Error</div>
+                                    </button>
+                                    <button onclick="rateFlashcard(2)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-amber-900/60 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-amber-400">2</div>
+                                        <div class="text-[9px] text-slate-400">Difícil</div>
+                                    </button>
+                                    <button onclick="rateFlashcard(3)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-blue-900/60 border border-slate-800 hover:border-blue-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-blue-400">3</div>
+                                        <div class="text-[9px] text-slate-400">Bueno</div>
+                                    </button>
+                                    <button onclick="rateFlashcard(4)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-emerald-900/60 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-emerald-400">4</div>
+                                        <div class="text-[9px] text-slate-400">Fácil</div>
+                                    </button>
+                                    <button onclick="rateFlashcard(5)" class="p-2 text-center rounded-xl bg-slate-900 hover:bg-teal-900/60 border border-slate-800 hover:border-teal-500/40 text-slate-300 hover:text-white transition cursor-pointer">
+                                        <div class="text-xs font-bold text-teal-400">5</div>
+                                        <div class="text-[9px] text-slate-400">Perfecto</div>
+                                    </button>
+                                </div>
                             </div>
                         </div>
+
+                        <button id="fc-flip-btn" onclick="flipFlashcard()" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-semibold text-sm transition shadow-lg shadow-blue-600/20 cursor-pointer">
+                            Mostrar Solución y Explicación
+                        </button>
                     </div>
 
-                    <button id="fc-flip-btn" onclick="flipFlashcard()" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition">
-                        Mostrar Solución y Explicación
-                    </button>
+                    <!-- Empty State (when 0 due) -->
+                    <div id="fc-empty-state" class="hidden text-center py-10 space-y-4">
+                        <div class="w-16 h-16 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-3xl">
+                            🎉
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">¡Al día! No tienes tarjetas pendientes hoy</h3>
+                            <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">Has completado todas tus repeticiones espaciadas programadas para hoy según el algoritmo SM-2.</p>
+                        </div>
+                        <div class="pt-2">
+                            <button onclick="switchTab('exam-modes')" class="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm">
+                                Hacer un Simulacro de Examen
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -880,7 +969,36 @@
         </div>
     </div>
 
+    <!-- Modal: Confirmación Elegante (Reemplazo no bloqueante de window.confirm) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center gap-3">
+                <div id="confirm-icon" class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg font-bold shrink-0">
+                    ⚠️
+                </div>
+                <div>
+                    <h3 id="confirm-title" class="text-base font-bold text-white">¿Estás seguro?</h3>
+                    <p id="confirm-subtitle" class="text-xs text-slate-400">Por favor confirma esta acción para continuar</p>
+                </div>
+            </div>
+            <div id="confirm-message" class="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                ¿Deseas continuar?
+            </div>
+            <div class="flex justify-end gap-2 pt-1">
+                <button id="confirm-btn-cancel" onclick="closeConfirmModal(false)" class="px-4 py-2 text-xs rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer font-medium">
+                    Cancelar
+                </button>
+                <button id="confirm-btn-action" onclick="closeConfirmModal(true)" class="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-sm shadow-blue-500/20">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
+
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.4"></script>
+    <script src="/app.js?v=2.0.5"></script>
 </body>
 </html>

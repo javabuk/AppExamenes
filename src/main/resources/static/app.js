@@ -16,7 +16,103 @@ let currentFlashcardIndex = 0;
 document.addEventListener('DOMContentLoaded', () => {
     loadTopics();
     loadDashboard();
+    setupModalInteractions();
 });
+
+// =================== TOAST NOTIFICATIONS & CONFIRM DIALOG ===================
+function showToast(message, type = 'info', durationMs = 3800) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-item pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-2xl border shadow-2xl backdrop-blur-md transition-all text-xs font-medium';
+
+    let icon = 'ℹ️';
+    let borderClass = 'bg-slate-900/95 border-slate-700/80 text-slate-200';
+
+    if (type === 'success') {
+        icon = '✅';
+        borderClass = 'bg-slate-900/95 border-emerald-500/40 text-emerald-300 shadow-emerald-500/10';
+    } else if (type === 'error') {
+        icon = '❌';
+        borderClass = 'bg-slate-900/95 border-rose-500/40 text-rose-300 shadow-rose-500/10';
+    } else if (type === 'warning') {
+        icon = '⚠️';
+        borderClass = 'bg-slate-900/95 border-amber-500/40 text-amber-300 shadow-amber-500/10';
+    }
+
+    toast.className += ` ${borderClass}`;
+    toast.innerHTML = `
+        <div class="flex items-center gap-2.5">
+            <span class="text-base select-none">${icon}</span>
+            <span class="leading-snug">${message}</span>
+        </div>
+        <button class="text-slate-400 hover:text-white p-1 cursor-pointer transition select-none text-sm font-bold leading-none">✕</button>
+    `;
+
+    const closeBtn = toast.querySelector('button');
+    const dismiss = () => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%) scale(0.95)';
+        setTimeout(() => toast.remove(), 200);
+    };
+
+    closeBtn.onclick = dismiss;
+    container.appendChild(toast);
+
+    if (durationMs > 0) {
+        setTimeout(dismiss, durationMs);
+    }
+}
+
+let confirmResolveHandler = null;
+
+function showConfirmDialog(title, message, options = {}) {
+    return new Promise((resolve) => {
+        confirmResolveHandler = resolve;
+        const modal = document.getElementById('modal-confirm');
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-message').textContent = message;
+        document.getElementById('confirm-subtitle').textContent = options.subtitle || 'Por favor confirma esta acción para continuar';
+        
+        const actionBtn = document.getElementById('confirm-btn-action');
+        actionBtn.textContent = options.confirmText || 'Confirmar';
+        if (options.danger) {
+            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-sm shadow-rose-500/20';
+        } else {
+            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-sm shadow-blue-500/20';
+        }
+        modal.classList.remove('hidden');
+    });
+}
+
+function closeConfirmModal(result) {
+    const modal = document.getElementById('modal-confirm');
+    modal.classList.add('hidden');
+    if (confirmResolveHandler) {
+        confirmResolveHandler(result);
+        confirmResolveHandler = null;
+    }
+}
+
+function setupModalInteractions() {
+    // Cerrar al pulsar tecla Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modals = document.querySelectorAll('[id^="modal-"]:not(.hidden)');
+            modals.forEach(m => closeModal(m.id));
+        }
+    });
+
+    // Cerrar al hacer clic en el backdrop exterior del modal
+    document.querySelectorAll('[id^="modal-"]').forEach(modalEl => {
+        modalEl.addEventListener('click', (e) => {
+            if (e.target === modalEl) {
+                closeModal(modalEl.id);
+            }
+        });
+    });
+}
 
 // =================== NAVEGACIÓN POR PESTAÑAS ===================
 function switchTab(tabId) {
@@ -179,6 +275,14 @@ async function loadDashboard() {
                 `;
                 table.appendChild(tr);
             });
+        } else {
+            table.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 text-xs">
+                <div class="flex flex-col items-center justify-center gap-1.5">
+                    <span class="text-2xl opacity-60">🕒</span>
+                    <span class="font-medium text-slate-400">No hay intentos registrados aún</span>
+                    <button onclick="startExamWithMode('SIMULATION')" class="text-blue-400 hover:text-blue-300 font-semibold underline text-xs mt-1 cursor-pointer">Iniciar primer simulacro oficial →</button>
+                </div>
+            </td></tr>`;
         }
     } catch (e) {
         console.error('Error cargando dashboard:', e);
@@ -235,7 +339,7 @@ async function executeStartExam(requestPayload) {
         });
 
         if (!resp.ok) {
-            alert('No se pudo iniciar el examen.');
+            showToast('No se pudo iniciar la sesión de examen.', 'error');
             return;
         }
 
@@ -266,8 +370,10 @@ async function executeStartExam(requestPayload) {
         switchTab('exam-runner');
         renderCurrentQuestion();
         renderQuestionGrid();
+        showToast('Examen iniciado. ¡Mucho éxito!', 'info', 2500);
     } catch (e) {
         console.error('Error iniciando examen:', e);
+        showToast('Error de conexión al iniciar el examen.', 'error');
     }
 }
 
@@ -283,7 +389,7 @@ function updateTimerDisplay() {
         timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         if (remaining <= 0) {
             clearInterval(examTimerInterval);
-            alert('¡Tiempo agotado! Enviando examen automáticamente...');
+            showToast('¡Tiempo agotado! Entregando examen automáticamente...', 'warning', 5000);
             submitExam();
         }
     } else {
@@ -451,13 +557,18 @@ function renderQuestionGrid() {
     });
 }
 
-function confirmSubmitExam() {
+async function confirmSubmitExam() {
     const unanswered = Object.values(userAnswers).filter(a => a.selectedOptions === '').length;
     let msg = '¿Deseas finalizar y entregar el examen ahora?';
     if (unanswered > 0) {
-        msg = `Tienes ${unanswered} pregunta(s) sin responder. ¿Deseas entregar el examen igualmente?`;
+        msg = `Tienes ${unanswered} pregunta(s) sin responder de ${currentSession.questions.length}. ¿Deseas entregar el examen igualmente?`;
     }
-    if (confirm(msg)) {
+    const ok = await showConfirmDialog('Entregar Examen', msg, {
+        confirmText: 'Entregar Ahora',
+        danger: unanswered > 0,
+        subtitle: unanswered > 0 ? 'Existen preguntas en blanco' : 'Revisión completada'
+    });
+    if (ok) {
         submitExam();
     }
 }
@@ -485,14 +596,16 @@ async function submitExam() {
         });
 
         if (!resp.ok) {
-            alert('Error al enviar el examen.');
+            showToast('Error al procesar la entrega del examen.', 'error');
             return;
         }
 
         const result = await resp.json();
+        showToast('Examen corregido y calificado con éxito.', 'success');
         showExamResult(result);
     } catch (e) {
         console.error('Error enviando examen:', e);
+        showToast('Error de conexión al enviar el examen.', 'error');
     }
 }
 
@@ -585,12 +698,13 @@ async function createMirrorVariant(questionId) {
     try {
         const resp = await fetch(`/api/questions/${questionId}/variant`, { method: 'POST' });
         if (resp.ok) {
-            alert('¡Variante espejo generada con éxito y añadida al banco de preguntas!');
+            showToast('¡Variante espejo generada con éxito y añadida al banco de preguntas!', 'success');
         } else {
-            alert('No se pudo generar la variante.');
+            showToast('No se pudo generar la variante espejo.', 'error');
         }
     } catch (e) {
         console.error('Error generando variante:', e);
+        showToast('Error de red al generar la variante.', 'error');
     }
 }
 
@@ -786,16 +900,17 @@ async function loadFlashcards() {
         document.getElementById('flashcard-due-number').textContent = dueFlashcards.length;
 
         if (dueFlashcards.length === 0) {
-            document.getElementById('flashcard-box').innerHTML = `
-                <div class="text-center py-8 space-y-3">
-                    <div class="text-4xl">🎉</div>
-                    <h3 class="text-lg font-bold text-white">¡No tienes tarjetas pendientes de repaso para hoy!</h3>
-                    <p class="text-xs text-slate-400 max-w-sm mx-auto">Has completado todas tus repeticiones espaciadas programadas según el algoritmo SM-2.</p>
-                    <button onclick="switchTab('exam-modes')" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white">Hacer un Simulacro</button>
-                </div>
-            `;
+            const cardContent = document.getElementById('fc-card-content');
+            const emptyState = document.getElementById('fc-empty-state');
+            if (cardContent) cardContent.classList.add('hidden');
+            if (emptyState) emptyState.classList.remove('hidden');
             return;
         }
+
+        const cardContent = document.getElementById('fc-card-content');
+        const emptyState = document.getElementById('fc-empty-state');
+        if (cardContent) cardContent.classList.remove('hidden');
+        if (emptyState) emptyState.classList.add('hidden');
 
         renderCurrentFlashcard();
     } catch (e) {
@@ -894,7 +1009,13 @@ function renderQuestionsList(questions) {
     container.innerHTML = '';
 
     if (questions.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">No se encontraron preguntas con los filtros indicados.</div>';
+        container.innerHTML = `
+            <div class="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
+                <div class="w-12 h-12 mx-auto rounded-full bg-slate-800/80 flex items-center justify-center text-xl">🔍</div>
+                <h4 class="text-sm font-semibold text-white">No se encontraron preguntas</h4>
+                <p class="text-xs text-slate-400 max-w-sm mx-auto">Prueba a cambiar el filtro de búsqueda o el tema seleccionado, o añade una nueva pregunta con el botón superior.</p>
+            </div>
+        `;
         return;
     }
 
@@ -973,7 +1094,13 @@ function renderMaterials(list) {
     container.innerHTML = '';
 
     if (list.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">No se encontraron documentos indexados con los filtros aplicados.</div>';
+        container.innerHTML = `
+            <div class="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
+                <div class="w-12 h-12 mx-auto rounded-full bg-slate-800/80 flex items-center justify-center text-xl">📑</div>
+                <h4 class="text-sm font-semibold text-white">No se encontraron documentos indexados</h4>
+                <p class="text-xs text-slate-400 max-w-sm mx-auto">No hay apuntes ni documentación técnica que coincidan con los filtros aplicados. Puedes importar una URL oficial de HL7 FHIR o subir un PDF de tu curso.</p>
+            </div>
+        `;
         return;
     }
 
@@ -1157,21 +1284,29 @@ function openViewMaterialModal(id) {
 function copyMaterialText() {
     if (!activeMaterialText) return;
     navigator.clipboard.writeText(activeMaterialText)
-        .then(() => alert('¡Texto del documento copiado al portapapeles!'))
-        .catch(() => alert('No se pudo copiar el texto.'));
+        .then(() => showToast('¡Texto del documento copiado al portapapeles!', 'success'))
+        .catch(() => showToast('No se pudo copiar el texto.', 'error'));
 }
 
 async function deleteMaterial(id) {
-    if (!confirm('¿Estás seguro de que deseas eliminar este documento indexado?')) return;
+    const ok = await showConfirmDialog('Eliminar Documento', '¿Estás seguro de que deseas eliminar este documento indexado? Se eliminará tanto el texto del buscador como el archivo en disco.', {
+        confirmText: 'Eliminar',
+        danger: true,
+        subtitle: 'Acción irreversible'
+    });
+    if (!ok) return;
+
     try {
         const resp = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
         if (resp.ok) {
+            showToast('Documento indexado eliminado correctamente.', 'success');
             await loadMaterials();
         } else {
-            alert('Error al eliminar el material.');
+            showToast('Error al eliminar el material.', 'error');
         }
     } catch (e) {
         console.error('Error eliminando material:', e);
+        showToast('Error de red al eliminar el material.', 'error');
     }
 }
 
@@ -1218,7 +1353,7 @@ async function importUrlMaterial(event) {
 
     const url = urlInput.value.trim();
     if (!url) {
-        alert('Por favor introduce una URL válida.');
+        showToast('Por favor introduce una URL válida.', 'warning');
         return;
     }
 
@@ -1238,17 +1373,17 @@ async function importUrlMaterial(event) {
         });
 
         if (resp.ok) {
-            alert('¡Contenido descargado e indexado con éxito desde la URL!');
+            showToast('¡Contenido descargado e indexado con éxito desde la URL!', 'success');
             urlInput.value = '';
             titleInput.value = '';
             await loadMaterials();
         } else {
             const err = await resp.json().catch(() => ({}));
-            alert('Error descargando la URL: ' + (err.error || 'Verifica la URL y la conexión.'));
+            showToast('Error descargando la URL: ' + (err.error || 'Verifica la URL y la conexión.'), 'error');
         }
     } catch (e) {
         console.error('Error importando URL:', e);
-        alert('Error en la petición: ' + e.message);
+        showToast('Error en la petición: ' + e.message, 'error');
     } finally {
         statusSpan.classList.add('hidden');
         submitBtn.disabled = false;
@@ -1261,11 +1396,17 @@ async function uploadPdf(event) {
     const fileInput = document.getElementById('upload-file');
     const topicSelect = document.getElementById('upload-topic-id');
     const titleInput = document.getElementById('upload-title');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
 
     if (!fileInput.files || fileInput.files.length === 0) {
-        alert('Por favor selecciona un archivo PDF.');
+        showToast('Por favor selecciona un archivo PDF.', 'warning');
         return;
     }
+
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="animate-spin mr-1.5 inline-block">⏳</span> Indexando con Apache PDFBox...';
+    submitBtn.classList.add('opacity-75');
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
@@ -1281,15 +1422,20 @@ async function uploadPdf(event) {
         });
 
         if (resp.ok) {
-            alert('¡PDF procesado e indexado con Apache PDFBox con éxito!');
+            showToast('¡PDF procesado e indexado con Apache PDFBox con éxito!', 'success');
             fileInput.value = '';
             titleInput.value = '';
-            loadMaterials();
+            await loadMaterials();
         } else {
-            alert('Error al procesar el PDF.');
+            showToast('Error al procesar el archivo PDF.', 'error');
         }
     } catch (e) {
         console.error('Error subiendo PDF:', e);
+        showToast('Error de red al subir el PDF.', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+        submitBtn.classList.remove('opacity-75');
     }
 }
 
@@ -1304,7 +1450,7 @@ async function submitCreateTopic() {
     const weight = parseFloat(document.getElementById('new-topic-weight').value || '10');
 
     if (!code || !name) {
-        alert('Por favor indica el código y el nombre del tema.');
+        showToast('Por favor indica el código y el nombre del tema.', 'warning');
         return;
     }
 
@@ -1320,12 +1466,13 @@ async function submitCreateTopic() {
             document.getElementById('new-topic-name').value = '';
             await loadTopics();
             await loadDashboard();
-            alert('¡Nuevo tema añadido al Syllabus con éxito!');
+            showToast('¡Nuevo tema añadido al Syllabus con éxito!', 'success');
         } else {
-            alert('Error al crear el tema (verifica que el código no esté duplicado).');
+            showToast('Error al crear el tema (verifica que el código no esté duplicado).', 'error');
         }
     } catch (e) {
         console.error('Error creando tema:', e);
+        showToast('Error de red al crear el tema.', 'error');
     }
 }
 
@@ -1349,7 +1496,7 @@ async function submitCreateQuestion() {
     const optD = document.getElementById('new-q-opt-d').value.trim();
 
     if (!stem || !explanation || !optA || !optB) {
-        alert('Completa al menos el enunciado, la explicación y las opciones A y B.');
+        showToast('Completa al menos el enunciado, la explicación y las opciones A y B.', 'warning');
         return;
     }
 
@@ -1393,12 +1540,13 @@ async function submitCreateQuestion() {
             document.getElementById('new-q-opt-d').value = '';
             await loadQuestions();
             await loadDashboard();
-            alert('¡Pregunta creada y añadida al banco y al sistema SM-2!');
+            showToast('¡Pregunta creada y añadida al banco y al sistema SM-2!', 'success');
         } else {
-            alert('Error al guardar la pregunta.');
+            showToast('Error al guardar la pregunta.', 'error');
         }
     } catch (e) {
         console.error('Error creando pregunta:', e);
+        showToast('Error de red al guardar la pregunta.', 'error');
     }
 }
 
@@ -1431,7 +1579,7 @@ function loadSampleImportJson() {
 async function submitImportJson() {
     const jsonText = document.getElementById('import-json-textarea').value.trim();
     if (!jsonText) {
-        alert('Pega un JSON válido para importar.');
+        showToast('Pega un JSON válido para importar.', 'warning');
         return;
     }
 
@@ -1447,12 +1595,12 @@ async function submitImportJson() {
             document.getElementById('import-json-textarea').value = '';
             await loadQuestions();
             await loadDashboard();
-            alert(`¡Importación exitosa! Se añadieron ${data.importedCount} preguntas al banco.`);
+            showToast(`¡Importación exitosa! Se añadieron ${data.importedCount} preguntas al banco.`, 'success');
         } else {
-            alert('Error en el formato JSON: ' + (data.error || 'Verifica la estructura.'));
+            showToast('Error en el formato JSON: ' + (data.error || 'Verifica la estructura.'), 'error');
         }
     } catch (e) {
-        alert('Error al procesar el JSON: ' + e.message);
+        showToast('Error al procesar el JSON: ' + e.message, 'error');
     }
 }
 
