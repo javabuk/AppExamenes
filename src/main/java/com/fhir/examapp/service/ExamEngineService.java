@@ -20,17 +20,20 @@ public class ExamEngineService {
     private final QuestionRepository questionRepository;
     private final SyllabusTopicRepository topicRepository;
     private final SpacedRepetitionService srsService;
+    private final StudyMaterialRepository studyMaterialRepository;
 
     public ExamEngineService(ExamAttemptRepository attemptRepository,
                              ExamAttemptAnswerRepository attemptAnswerRepository,
                              QuestionRepository questionRepository,
                              SyllabusTopicRepository topicRepository,
-                             SpacedRepetitionService srsService) {
+                             SpacedRepetitionService srsService,
+                             StudyMaterialRepository studyMaterialRepository) {
         this.attemptRepository = attemptRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
         this.questionRepository = questionRepository;
         this.topicRepository = topicRepository;
         this.srsService = srsService;
+        this.studyMaterialRepository = studyMaterialRepository;
     }
 
     /**
@@ -45,7 +48,20 @@ public class ExamEngineService {
         int totalQuestionsNeeded = request.getQuestionCount() != null && request.getQuestionCount() > 0 
                 ? request.getQuestionCount() : 10;
 
-        List<Question> selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId());
+        List<Question> selectedQuestions;
+        String materialTitle = null;
+
+        if (request.getMaterialId() != null) {
+            StudyMaterial mat = studyMaterialRepository.findById(request.getMaterialId()).orElse(null);
+            if (mat != null) {
+                materialTitle = mat.getTitle();
+                selectedQuestions = selectQuestionsForMaterial(mat, mode, totalQuestionsNeeded);
+            } else {
+                selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId());
+            }
+        } else {
+            selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId());
+        }
 
         if (selectedQuestions.isEmpty()) {
             // Si el modo específico no arrojó resultados (ej. no hay fallos en ERRORS), cargar banco general
@@ -65,6 +81,8 @@ public class ExamEngineService {
         session.setMode(mode);
         session.setStartedAt(attempt.getStartedAt());
         session.setTotalQuestions(selectedQuestions.size());
+        session.setMaterialId(request.getMaterialId());
+        session.setMaterialTitle(materialTitle);
 
         if ("SIMULATION".equalsIgnoreCase(mode)) {
             // En simulación estándar HL7, ~1.8 minutos por pregunta (50 preguntas en 90 min)
@@ -80,6 +98,8 @@ public class ExamEngineService {
             qDto.setTopicId(q.getTopic() != null ? q.getTopic().getId() : null);
             qDto.setTopicCode(q.getTopic() != null ? q.getTopic().getCode() : "");
             qDto.setTopicName(q.getTopic() != null ? q.getTopic().getName() : "");
+            qDto.setMaterialId(q.getMaterial() != null ? q.getMaterial().getId() : null);
+            qDto.setMaterialTitle(q.getMaterial() != null ? q.getMaterial().getTitle() : null);
             qDto.setQuestionType(q.getQuestionType());
             qDto.setDifficulty(q.getDifficulty());
             qDto.setStem(q.getStem());
@@ -207,6 +227,86 @@ public class ExamEngineService {
         result.setReviews(reviews);
 
         return result;
+    }
+
+    public List<Question> selectQuestionsForMaterial(StudyMaterial material, String mode, int count) {
+        if (material == null) return Collections.emptyList();
+
+        Long materialId = material.getId();
+
+        // 1. Preguntas explícitamente vinculadas a este material
+        List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
+        List<Question> result = new ArrayList<>(linked);
+        Set<Long> pickedIds = linked.stream().map(Question::getId).collect(Collectors.toSet());
+
+        // 2. Si faltan preguntas para la cuota solicitada, buscar preguntas del mismo tema
+        //    y ordenarlas por relevancia según los conceptos y palabras clave del documento
+        if (result.size() < count && material.getTopic() != null) {
+            List<Question> topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId());
+
+            Set<String> keywords = extractKeywords((material.getTitle() != null ? material.getTitle() : "") + " " +
+                                                   (material.getContentText() != null ? material.getContentText() : ""));
+
+            topicQuestions.sort((q1, q2) -> {
+                int score1 = calculateRelevanceScore(q1, keywords);
+                int score2 = calculateRelevanceScore(q2, keywords);
+                return Integer.compare(score2, score1); // Más afines primero
+            });
+
+            for (Question q : topicQuestions) {
+                if (result.size() >= count) break;
+                if (!pickedIds.contains(q.getId())) {
+                    result.add(q);
+                    pickedIds.add(q.getId());
+                }
+            }
+        }
+
+        // 3. Si aún faltaran para alcanzar la cuota (p. ej. en temas pequeños), rellenar con banco general
+        if (result.size() < count) {
+            List<Question> remaining = questionRepository.findByVerifiedTrue();
+            Collections.shuffle(remaining);
+            for (Question q : remaining) {
+                if (result.size() >= count) break;
+                if (!pickedIds.contains(q.getId())) {
+                    result.add(q);
+                    pickedIds.add(q.getId());
+                }
+            }
+        }
+
+        if (!"TUTOR".equalsIgnoreCase(mode)) {
+            Collections.shuffle(result);
+        }
+
+        return result.size() > count ? result.subList(0, count) : result;
+    }
+
+    private Set<String> extractKeywords(String text) {
+        if (text == null) return Collections.emptySet();
+        Set<String> stopWords = Set.of(
+            "de", "la", "el", "los", "las", "un", "una", "unos", "unas", "y", "o", "en", "para", "por", "con", "sin",
+            "este", "esta", "estos", "estas", "del", "al", "que", "se", "es", "son", "su", "sus", "como", "the",
+            "and", "to", "of", "in", "for", "with", "on", "at", "by", "from", "an", "as", "is", "are", "or", "that",
+            "http", "https", "org", "hl7", "fhir", "html"
+        );
+        return Arrays.stream(text.toLowerCase().split("[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_]+"))
+                .filter(w -> w.length() >= 4)
+                .filter(w -> !stopWords.contains(w))
+                .collect(Collectors.toSet());
+    }
+
+    private int calculateRelevanceScore(Question q, Set<String> keywords) {
+        int score = 0;
+        String full = ((q.getStem() != null ? q.getStem() : "") + " " +
+                       (q.getCodeSnippet() != null ? q.getCodeSnippet() : "") + " " +
+                       (q.getExplanation() != null ? q.getExplanation() : "")).toLowerCase();
+        for (String kw : keywords) {
+            if (full.contains(kw)) {
+                score++;
+            }
+        }
+        return score;
     }
 
     private List<Question> selectQuestionsForMode(String mode, int count, Long topicIdFilter) {

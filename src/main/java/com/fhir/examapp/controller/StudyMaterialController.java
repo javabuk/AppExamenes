@@ -105,6 +105,28 @@ public class StudyMaterialController {
         return m != null ? ResponseEntity.ok(m) : ResponseEntity.notFound().build();
     }
 
+    @GetMapping("/{id}/practice-info")
+    public ResponseEntity<?> getPracticeInfo(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(studyMaterialService.getPracticeInfo(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/generate-question")
+    public ResponseEntity<?> generateQuestion(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(studyMaterialService.generateQuestionFromMaterial(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error generando pregunta: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/{id}/file")
     public ResponseEntity<org.springframework.core.io.Resource> getMaterialFile(
             @PathVariable Long id,

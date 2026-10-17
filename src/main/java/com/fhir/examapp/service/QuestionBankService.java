@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
+import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.domain.SyllabusTopic;
 import com.fhir.examapp.dto.QuestionCreateDTO;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
+import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,27 +26,44 @@ public class QuestionBankService {
     private final QuestionRepository questionRepository;
     private final QuestionOptionRepository optionRepository;
     private final SyllabusTopicRepository topicRepository;
+    private final StudyMaterialRepository materialRepository;
     private final SpacedRepetitionService srsService;
     private final ObjectMapper objectMapper;
 
     public QuestionBankService(QuestionRepository questionRepository,
                                QuestionOptionRepository optionRepository,
                                SyllabusTopicRepository topicRepository,
+                               StudyMaterialRepository materialRepository,
                                SpacedRepetitionService srsService,
                                ObjectMapper objectMapper) {
         this.questionRepository = questionRepository;
         this.optionRepository = optionRepository;
         this.topicRepository = topicRepository;
+        this.materialRepository = materialRepository;
         this.srsService = srsService;
         this.objectMapper = objectMapper;
     }
 
     public Question createQuestion(QuestionCreateDTO dto) {
-        SyllabusTopic topic = topicRepository.findById(dto.getTopicId())
-                .orElseThrow(() -> new IllegalArgumentException("Tema no encontrado: " + dto.getTopicId()));
+        StudyMaterial material = null;
+        if (dto.getMaterialId() != null) {
+            material = materialRepository.findById(dto.getMaterialId()).orElse(null);
+        }
+
+        final Long resolvedTopicId = (dto.getTopicId() != null)
+                ? dto.getTopicId()
+                : (material != null && material.getTopic() != null ? material.getTopic().getId() : null);
+
+        if (resolvedTopicId == null) {
+            throw new IllegalArgumentException("Debe especificarse un tema (topicId) o un documento asociado con tema válido.");
+        }
+
+        SyllabusTopic topic = topicRepository.findById(resolvedTopicId)
+                .orElseThrow(() -> new IllegalArgumentException("Tema no encontrado: " + resolvedTopicId));
 
         Question question = new Question();
         question.setTopic(topic);
+        question.setMaterial(material);
         question.setStem(dto.getStem());
         question.setCodeSnippet(dto.getCodeSnippet());
         question.setExplanation(dto.getExplanation());
@@ -151,12 +170,22 @@ public class QuestionBankService {
     }
 
     /**
-     * Importación masiva de preguntas desde formato JSON.
+     * Importación masiva de preguntas desde formato JSON con soporte de tema y material por defecto.
      */
     public int importQuestionsFromJson(String jsonContent) throws IOException {
+        return importQuestionsFromJson(jsonContent, null, null);
+    }
+
+    public int importQuestionsFromJson(String jsonContent, Long defaultTopicId, Long defaultMaterialId) throws IOException {
         List<QuestionCreateDTO> dtoList = objectMapper.readValue(jsonContent, new TypeReference<List<QuestionCreateDTO>>() {});
         int count = 0;
         for (QuestionCreateDTO dto : dtoList) {
+            if (dto.getTopicId() == null && defaultTopicId != null) {
+                dto.setTopicId(defaultTopicId);
+            }
+            if (dto.getMaterialId() == null && defaultMaterialId != null) {
+                dto.setMaterialId(defaultMaterialId);
+            }
             createQuestion(dto);
             count++;
         }

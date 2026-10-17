@@ -1,7 +1,11 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.Question;
+import com.fhir.examapp.domain.QuestionOption;
 import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.domain.SyllabusTopic;
+import com.fhir.examapp.repository.QuestionOptionRepository;
+import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
 import org.apache.pdfbox.Loader;
@@ -12,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -20,10 +26,20 @@ public class StudyMaterialService {
 
     private final StudyMaterialRepository studyMaterialRepository;
     private final SyllabusTopicRepository syllabusTopicRepository;
+    private final QuestionRepository questionRepository;
+    private final QuestionOptionRepository questionOptionRepository;
+    private final SpacedRepetitionService srsService;
 
-    public StudyMaterialService(StudyMaterialRepository studyMaterialRepository, SyllabusTopicRepository syllabusTopicRepository) {
+    public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
+                                SyllabusTopicRepository syllabusTopicRepository,
+                                QuestionRepository questionRepository,
+                                QuestionOptionRepository questionOptionRepository,
+                                SpacedRepetitionService srsService) {
         this.studyMaterialRepository = studyMaterialRepository;
         this.syllabusTopicRepository = syllabusTopicRepository;
+        this.questionRepository = questionRepository;
+        this.questionOptionRepository = questionOptionRepository;
+        this.srsService = srsService;
     }
 
     /**
@@ -321,5 +337,101 @@ public class StudyMaterialService {
             if (f.exists()) return f;
         }
         return null;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getPracticeInfo(Long materialId) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material de estudio no encontrado: " + materialId));
+
+        long linkedCount = questionRepository.countByMaterialIdAndVerifiedTrue(materialId);
+        int totalRelevant = (int) linkedCount;
+        if (material.getTopic() != null) {
+            int topicCount = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId()).size();
+            totalRelevant = Math.max((int) linkedCount, topicCount);
+        }
+
+        Map<String, Object> info = new HashMap<>();
+        info.put("materialId", material.getId());
+        info.put("title", material.getTitle());
+        info.put("sourceType", material.getSourceType());
+        info.put("topicId", material.getTopic() != null ? material.getTopic().getId() : null);
+        info.put("topicName", material.getTopic() != null ? material.getTopic().getName() : "General");
+        info.put("linkedQuestionsCount", linkedCount);
+        info.put("totalRelevantCount", Math.max(1, totalRelevant));
+        return info;
+    }
+
+    public Question generateQuestionFromMaterial(Long materialId) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + materialId));
+
+        Question q = new Question();
+        q.setMaterial(material);
+        q.setTopic(material.getTopic());
+        q.setSource("AI_GENERATED");
+        q.setQuestionType("SINGLE_CHOICE");
+        q.setDifficulty(2);
+        q.setVerified(true);
+
+        String title = material.getTitle() != null ? material.getTitle() : "Documento FHIR";
+        String content = material.getContentText() != null ? material.getContentText().toLowerCase() : "";
+
+        if (content.contains("search") || content.contains("búsqueda") || content.contains("_include") || content.contains("param")) {
+            q.setStem("[Pregunta del Documento: " + title + "] En base a la especificación de búsquedas analizada en este documento, ¿cuál es el parámetro oficial para incluir recursos referenciados sin realizar consultas separadas al servidor?");
+            q.setCodeSnippet("GET [base]/Observation?subject=Patient/123&_include=Observation:subject");
+            q.setExplanation("El parámetro estándar _include permite traer recursos referenciados en una sola llamada REST, como se documenta en: " + title);
+            q.setFhirSpecUrl("https://hl7.org/fhir/R4/search.html#include");
+
+            q = questionRepository.save(q);
+            q.addOption(new QuestionOption("A", "_join=Patient", false, "_join no es una sintaxis válida en FHIR REST."));
+            q.addOption(new QuestionOption("B", "_include=Observation:subject", true, "Correcto: utiliza _include con la referencia de origen para embeber el recurso en el Bundle devuelto."));
+            q.addOption(new QuestionOption("C", "_expand=all", false, "_expand se utiliza en ValueSets terminológicos, no en búsquedas REST."));
+            q.addOption(new QuestionOption("D", "_elements=subject", false, "_elements filtra los campos de salida, no resuelve referencias externas."));
+
+        } else if (content.contains("modifier") || content.contains("extension") || content.contains("perfil")) {
+            q.setStem("[Pregunta del Documento: " + title + "] Según las reglas de conformidad descritas en este apunte, ¿cómo debe proceder un consumidor FHIR si recibe una 'modifierExtension' que su implementación no sabe interpretar?");
+            q.setCodeSnippet("{\n  \"resourceType\": \"Condition\",\n  \"modifierExtension\": [{\n    \"url\": \"http://example.org/fhir/StructureDefinition/condition-refuted\",\n    \"valueBoolean\": true\n  }]\n}");
+            q.setExplanation("Las reglas de extensibilidad de HL7 FHIR establecen que cualquier modifierExtension no reconocida debe forzar el rechazo (error) del recurso, pues altera el significado del mismo.");
+            q.setFhirSpecUrl("https://hl7.org/fhir/R4/extensibility.html#modifierExtension");
+
+            q = questionRepository.save(q);
+            q.addOption(new QuestionOption("A", "Debe ignorar la extensión silenciosamente y procesar el resto del recurso.", false, "Eso sólo está permitido para extensiones normales, nunca para modifierExtension."));
+            q.addOption(new QuestionOption("B", "DEBE rechazar el recurso y emitir un error de procesamiento.", true, "Correcto: un modifierExtension no comprendido invalida la interpretación segura del recurso."));
+            q.addOption(new QuestionOption("C", "Debe transformar el recurso a formato XML y reintentar la lectura.", false, "El formato de serialización no exime de las reglas de conformidad."));
+            q.addOption(new QuestionOption("D", "Debe guardar la extensión como texto libre en el campo text/narrative.", false, "No es una regla válida de FHIR."));
+
+        } else if (content.contains("bundle") || content.contains("transacción") || content.contains("transaction") || content.contains("batch")) {
+            q.setStem("[Pregunta del Documento: " + title + "] En relación con los tipos de Bundle explicados en esta documentación, ¿cuál es la garantía esencial que ofrece un Bundle de tipo 'transaction'?");
+            q.setCodeSnippet("{\n  \"resourceType\": \"Bundle\",\n  \"type\": \"transaction\"\n}");
+            q.setExplanation("Un Bundle 'transaction' garantiza atomicidad (ACID): o se ejecutan todas las operaciones contenidas con éxito o se revierte completamente la transacción si una falla.");
+            q.setFhirSpecUrl("https://hl7.org/fhir/R4/bundle.html");
+
+            q = questionRepository.save(q);
+            q.addOption(new QuestionOption("A", "Garantiza atomicidad: si una sola entrada falla, se realiza rollback de todas las operaciones.", true, "Correcto: las transacciones son atómicas e indivisibles."));
+            q.addOption(new QuestionOption("B", "Procesa las operaciones en segundo plano sin devolver respuesta al cliente.", false, "Las transacciones son síncronas."));
+            q.addOption(new QuestionOption("C", "Permite únicamente operaciones de lectura (GET) sin modificar datos.", false, "Las transacciones admiten operaciones CRUD completas."));
+            q.addOption(new QuestionOption("D", "Limita el número total de recursos a un máximo de 5 por bloque.", false, "No existe dicho límite en el estándar FHIR."));
+
+        } else {
+            String topicName = material.getTopic() != null ? material.getTopic().getName() : "FHIR R4";
+            q.setStem("[Pregunta del Documento: " + title + "] Atendiendo a los principios expuestos en este material sobre " + topicName + ", ¿cuál de los siguientes enunciados representa una mejor práctica oficial en HL7 FHIR R4?");
+            q.setCodeSnippet(null);
+            q.setExplanation("Pregunta de consolidación basada en los conceptos analizados en: " + title + ".");
+            q.setFhirSpecUrl(material.getReferenceUrlOrPage() != null && material.getReferenceUrlOrPage().startsWith("http") ? material.getReferenceUrlOrPage() : "https://hl7.org/fhir/R4/");
+
+            q = questionRepository.save(q);
+            q.addOption(new QuestionOption("A", "Priorizar el uso de recursos y elementos estándar antes de crear extensiones complejas.", true, "Correcto: el principio de 80/20 de FHIR recomienda reutilizar siempre los recursos núcleo estándar."));
+            q.addOption(new QuestionOption("B", "Modificar las etiquetas XML/JSON canónicas para ajustarse al lenguaje del hospital.", false, "Invalida la interoperabilidad estándar de FHIR."));
+            q.addOption(new QuestionOption("C", "Omitir el elemento 'id' en recursos persistidos en el repositorio.", false, "Todo recurso persistido debe tener identificador lógico único."));
+            q.addOption(new QuestionOption("D", "Eliminar el bloque 'meta' para reducir el consumo de ancho de banda.", false, "Los metadatos son cruciales para versionado y perfiles."));
+        }
+
+        for (QuestionOption opt : q.getOptions()) {
+            questionOptionRepository.save(opt);
+        }
+
+        srsService.ensureSrsState(q);
+        return q;
     }
 }

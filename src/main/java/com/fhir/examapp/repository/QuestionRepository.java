@@ -13,6 +13,10 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     List<Question> findByTopicIdAndVerifiedTrue(Long topicId);
 
+    List<Question> findByMaterialIdAndVerifiedTrue(Long materialId);
+
+    long countByMaterialIdAndVerifiedTrue(Long materialId);
+
     List<Question> findByVerifiedTrue();
 
     List<Question> findByTopicId(Long topicId);

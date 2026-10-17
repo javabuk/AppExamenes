@@ -25,6 +25,7 @@ class ExamEngineServiceTest {
     private QuestionRepository questionRepository;
     private SyllabusTopicRepository topicRepository;
     private SpacedRepetitionService srsService;
+    private StudyMaterialRepository materialRepository;
     private ExamEngineService examEngineService;
 
     @BeforeEach
@@ -34,13 +35,15 @@ class ExamEngineServiceTest {
         questionRepository = Mockito.mock(QuestionRepository.class);
         topicRepository = Mockito.mock(SyllabusTopicRepository.class);
         srsService = Mockito.mock(SpacedRepetitionService.class);
+        materialRepository = Mockito.mock(StudyMaterialRepository.class);
 
         examEngineService = new ExamEngineService(
                 attemptRepository,
                 attemptAnswerRepository,
                 questionRepository,
                 topicRepository,
-                srsService
+                srsService,
+                materialRepository
         );
 
         when(attemptRepository.save(any(ExamAttempt.class))).thenAnswer(i -> {

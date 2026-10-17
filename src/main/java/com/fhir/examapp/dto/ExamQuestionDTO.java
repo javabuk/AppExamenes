@@ -17,6 +17,8 @@ public class ExamQuestionDTO {
     private String explanation;
     private String fhirSpecUrl;
     private String correctOptionLabel;
+    private Long materialId;
+    private String materialTitle;
 
     public ExamQuestionDTO() {}
 
@@ -55,4 +57,10 @@ public class ExamQuestionDTO {
 
     public String getCorrectOptionLabel() { return correctOptionLabel; }
     public void setCorrectOptionLabel(String correctOptionLabel) { this.correctOptionLabel = correctOptionLabel; }
+
+    public Long getMaterialId() { return materialId; }
+    public void setMaterialId(Long materialId) { this.materialId = materialId; }
+
+    public String getMaterialTitle() { return materialTitle; }
+    public void setMaterialTitle(String materialTitle) { this.materialTitle = materialTitle; }
 }

@@ -619,6 +619,7 @@
                         <div class="flex items-center gap-2">
                             <span id="runner-mode-badge" class="px-2 py-0.5 text-xs font-bold rounded bg-blue-500/20 text-blue-400">SIMULATION</span>
                             <span class="text-xs text-slate-400">Pregunta <span id="runner-current-idx">1</span> de <span id="runner-total-count">10</span></span>
+                            <span id="runner-material-badge" class="hidden px-2.5 py-0.5 text-xs font-semibold rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono truncate max-w-xs md:max-w-md"></span>
                         </div>
                         <div class="text-sm font-semibold text-slate-300 mt-0.5" id="runner-topic-name">Tema</div>
                     </div>
@@ -1126,6 +1127,13 @@
                         <option value="">Todos los temas (Ponderación Oficial)</option>
                     </select>
                 </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Filtrar por Documento / Apunte (Opcional):</label>
+                    <select id="modal-material-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white">
+                        <option value="">(Todos los documentos y banco general)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="flex justify-end gap-2 pt-2">
@@ -1175,6 +1183,12 @@
                         <option value="1">1 - Básico</option>
                         <option value="2" selected>2 - Nivel Examen Oficial</option>
                         <option value="3">3 - Avanzado / Arquitecto</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Apunte o Documento Asociado (Opcional):</label>
+                    <select id="new-q-material-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+                        <option value="">(Ninguno / Pregunta General del Tema)</option>
                     </select>
                 </div>
             </div>
@@ -1234,13 +1248,36 @@
     <div id="modal-import-json" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl modal-box">
             <div class="flex items-center justify-between">
-                <h3 class="text-lg font-bold text-white">Importación Masiva de Preguntas (JSON)</h3>
-                <button onclick="loadSampleImportJson()" class="text-xs text-blue-400 hover:underline">Cargar Plantilla de Ejemplo</button>
+                <div>
+                    <h3 class="text-lg font-bold text-white">Importación Masiva de Preguntas (JSON)</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Asigna un tema o documento por defecto, o defínelo en cada objeto del JSON con <code class="text-emerald-400">topicId</code> y <code class="text-emerald-400">materialId</code>.</p>
+                </div>
+                <button onclick="loadSampleImportJson()" class="text-xs text-blue-400 hover:underline cursor-pointer font-medium">Cargar Plantilla de Ejemplo</button>
             </div>
-            <textarea id="import-json-textarea" rows="12" placeholder="Pega aquí el array JSON de preguntas..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-emerald-400"></textarea>
-            <div class="flex justify-end gap-2 pt-2">
-                <button onclick="closeModal('modal-import-json')" class="px-4 py-2 text-xs rounded-lg bg-slate-700 text-slate-300">Cancelar</button>
-                <button onclick="submitImportJson()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">Importar Ahora</button>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-900/60 p-3.5 rounded-xl border border-slate-700/80">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Asignar Tema por Defecto (Opcional):</label>
+                    <select id="import-json-topic-id" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                        <option value="">(Definido en cada objeto JSON)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Asignar Apunte / Documento (Opcional):</label>
+                    <select id="import-json-material-id" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                        <option value="">(Ninguno / Definido en cada objeto JSON)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Array JSON de Preguntas:</label>
+                <textarea id="import-json-textarea" rows="11" placeholder="Pega aquí el array JSON de preguntas..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-emerald-400 focus:outline-none focus:border-blue-500"></textarea>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-1 border-t border-slate-700/80">
+                <button onclick="closeModal('modal-import-json')" class="px-4 py-2 text-xs rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 cursor-pointer">Cancelar</button>
+                <button onclick="submitImportJson()" class="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition shadow-md shadow-emerald-600/30 cursor-pointer">Importar Ahora</button>
             </div>
         </div>
     </div>
@@ -1251,6 +1288,7 @@
             <div class="flex items-center justify-between border-b border-slate-700 pb-3">
                 <div class="overflow-hidden">
                     <div class="flex items-center gap-2">
+                        <span id="view-mat-id-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
                         <span id="view-mat-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30">DOCUMENTO</span>
                         <h3 id="view-mat-title" class="text-base md:text-lg font-bold text-white truncate max-w-md md:max-w-xl">Título del Documento</h3>
                     </div>
@@ -1295,7 +1333,7 @@
                         📥 Descargar Archivo
                     </a>
                     <button id="view-mat-btn-practice" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
-                        🎯 Practicar este Tema
+                        🎯 Practicar este Documento
                     </button>
                     <button id="view-mat-btn-copy" onclick="copyMaterialText()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
                         📋 Copiar Texto
@@ -1315,6 +1353,7 @@
                     <div class="overflow-hidden">
                         <h3 id="pdf-viewer-title" class="text-sm md:text-base font-bold text-white truncate max-w-md md:max-w-xl">Visor de PDF Original</h3>
                         <div class="flex items-center gap-2 text-xs text-slate-400">
+                            <span id="pdf-viewer-id-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
                             <span id="pdf-viewer-topic" class="text-blue-400 font-semibold truncate">Tema</span>
                             <span class="text-slate-600">•</span>
                             <span class="text-emerald-400 font-mono text-[11px]">PDFBox / Stream Oficial</span>
@@ -1342,6 +1381,80 @@
                 </span>
                 <button onclick="closePdfViewer()" class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer">
                     Cerrar Visor
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Practicar Preguntas de un Apunte o Documento Concreto -->
+    <div id="modal-practice-material" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-start justify-between border-b border-slate-700 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center text-xl shrink-0">
+                        🎯
+                    </div>
+                    <div class="overflow-hidden">
+                        <h3 id="practice-mat-title" class="text-base font-bold text-white truncate max-w-sm">Título del Documento</h3>
+                        <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                            <span id="practice-mat-id-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
+                            <span id="practice-mat-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-700 text-slate-300">TIPO</span>
+                            <span id="practice-mat-topic" class="text-blue-400 font-semibold truncate">Tema</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-practice-material')" class="text-slate-400 hover:text-white text-lg font-bold p-1 cursor-pointer">✕</button>
+            </div>
+
+            <!-- Stats banner -->
+            <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs">
+                <div>
+                    <div class="text-slate-400 text-[11px]">Preguntas vinculadas directamente:</div>
+                    <div id="practice-mat-linked-count" class="text-emerald-400 font-bold font-mono text-sm mt-0.5">0 preguntas</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-slate-400 text-[11px]">Banco disponible para este tema:</div>
+                    <div id="practice-mat-total-count" class="text-blue-400 font-bold font-mono text-sm mt-0.5">0 preguntas</div>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">Modo de Práctica:</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="practice-mode-tutor-btn" onclick="selectPracticeMaterialMode('TUTOR')" class="p-3 rounded-xl border bg-blue-600/20 border-blue-500 text-white text-left cursor-pointer transition">
+                            <div class="font-bold flex items-center gap-1.5">👨‍🏫 Modo Tutor</div>
+                            <div class="text-[10px] text-slate-300 mt-1">Retroalimentación inmediata, justificación oficial y enlaces a la doc.</div>
+                        </button>
+                        <button type="button" id="practice-mode-sim-btn" onclick="selectPracticeMaterialMode('SIMULATION')" class="p-3 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 hover:text-white text-left cursor-pointer transition">
+                            <div class="font-bold flex items-center gap-1.5">⏱️ Simulacro</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Cronometrado con nota y análisis de fallos al terminar la sesión.</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">Número de Preguntas a Practicar:</label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button type="button" onclick="selectPracticeQuestionCount(5)" class="practice-count-btn py-2 text-center rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500 text-slate-300 font-semibold cursor-pointer">5</button>
+                        <button type="button" onclick="selectPracticeQuestionCount(10)" class="practice-count-btn active py-2 text-center rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">10</button>
+                        <button type="button" onclick="selectPracticeQuestionCount(15)" class="practice-count-btn py-2 text-center rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500 text-slate-300 font-semibold cursor-pointer">15</button>
+                        <button type="button" onclick="selectPracticeQuestionCount('all')" class="practice-count-btn py-2 text-center rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500 text-slate-300 font-semibold cursor-pointer">Todas</button>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-700/80 flex items-center justify-between">
+                    <button type="button" id="btn-practice-generate-q" onclick="generateQuestionForActiveMaterial()" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer">
+                        <span>✨ Generar nueva pregunta desde este apunte</span>
+                    </button>
+                    <span id="practice-generate-status" class="hidden text-amber-400 text-[11px]"><span class="animate-spin">⏳</span> Analizando texto...</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-700">
+                <button onclick="closeModal('modal-practice-material')" class="px-4 py-2 text-xs rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 cursor-pointer">Cancelar</button>
+                <button onclick="startPracticeForActiveMaterial()" class="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2">
+                    <span>🚀 Iniciar Práctica</span>
                 </button>
             </div>
         </div>
@@ -1377,6 +1490,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.7"></script>
+    <script src="/app.js?v=2.0.10"></script>
 </body>
 </html>

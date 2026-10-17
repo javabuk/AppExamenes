@@ -24,6 +24,10 @@ public class Question {
     @JsonIgnore
     private Question parentQuestion;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id")
+    private StudyMaterial material;
+
     @Column(nullable = false)
     private String source; // 'MOCK_EXAM', 'AI_GENERATED', 'MANUAL'
 
@@ -90,6 +94,9 @@ public class Question {
 
     public Boolean getVerified() { return verified; }
     public void setVerified(Boolean verified) { this.verified = verified; }
+
+    public StudyMaterial getMaterial() { return material; }
+    public void setMaterial(StudyMaterial material) { this.material = material; }
 
     public List<QuestionOption> getOptions() { return options; }
     public void setOptions(List<QuestionOption> options) { this.options = options; }

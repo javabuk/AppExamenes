@@ -4,6 +4,7 @@ import java.util.List;
 
 public class QuestionCreateDTO {
     private Long topicId;
+    private Long materialId; // Opcional, para asociar la pregunta a un apunte concreto
     private String stem;
     private String codeSnippet;
     private String explanation;
@@ -18,6 +19,9 @@ public class QuestionCreateDTO {
 
     public Long getTopicId() { return topicId; }
     public void setTopicId(Long topicId) { this.topicId = topicId; }
+
+    public Long getMaterialId() { return materialId; }
+    public void setMaterialId(Long materialId) { this.materialId = materialId; }
 
     public String getStem() { return stem; }
     public void setStem(String stem) { this.stem = stem; }

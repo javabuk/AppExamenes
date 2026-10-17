@@ -16,6 +16,7 @@ let currentFlashcardIndex = 0;
 document.addEventListener('DOMContentLoaded', () => {
     loadTopics();
     loadDashboard();
+    loadMaterials();
     setupModalInteractions();
 });
 
@@ -244,7 +245,7 @@ async function loadTopics() {
 }
 
 function populateTopicSelects() {
-    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id'];
+    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id', 'import-json-topic-id'];
     selects.forEach(selectId => {
         const el = document.getElementById(selectId);
         if (!el) return;
@@ -416,9 +417,11 @@ function executeStartModalExam() {
     const count = parseInt(document.getElementById('modal-question-count').value, 10);
     const topicIdVal = document.getElementById('modal-topic-id').value;
     const topicId = topicIdVal ? parseInt(topicIdVal, 10) : null;
+    const matIdVal = document.getElementById('modal-material-id') ? document.getElementById('modal-material-id').value : '';
+    const materialId = matIdVal ? parseInt(matIdVal, 10) : null;
 
     closeModal('modal-new-exam');
-    executeStartExam({ mode, questionCount: count, topicId });
+    executeStartExam({ mode, questionCount: count, topicId, materialId });
 }
 
 async function executeStartExam(requestPayload) {
@@ -501,6 +504,17 @@ function renderCurrentQuestion(isNavigating = false) {
     document.getElementById('runner-current-idx').textContent = (currentQuestionIndex + 1);
     document.getElementById('runner-total-count').textContent = currentSession.totalQuestions;
     document.getElementById('runner-topic-name').textContent = q.topicName || 'General';
+
+    const matBadge = document.getElementById('runner-material-badge');
+    if (matBadge) {
+        const materialTitle = q.materialTitle || (currentSession ? currentSession.materialTitle : null);
+        if (materialTitle) {
+            matBadge.textContent = `📄 ${materialTitle}`;
+            matBadge.classList.remove('hidden');
+        } else {
+            matBadge.classList.add('hidden');
+        }
+    }
     
     const stemEl = document.getElementById('runner-stem');
     stemEl.textContent = q.stem;
@@ -1199,10 +1213,30 @@ async function loadMaterials() {
         if (resp.ok) {
             allMaterials = await resp.json();
             renderMaterials(allMaterials);
+            populateMaterialSelects();
         }
     } catch (e) {
         console.error('Error cargando materiales:', e);
     }
+}
+
+function populateMaterialSelects() {
+    const selects = ['modal-material-id', 'new-q-material-id', 'import-json-material-id'];
+    selects.forEach(selectId => {
+        const el = document.getElementById(selectId);
+        if (!el) return;
+        const firstOption = el.options[0];
+        el.innerHTML = '';
+        if (firstOption) el.appendChild(firstOption);
+
+        allMaterials.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            const topicPrefix = m.topic ? `[${m.topic.code || m.topic.name}] ` : '';
+            opt.textContent = `${topicPrefix}${m.title}`;
+            el.appendChild(opt);
+        });
+    });
 }
 
 function filterMaterials() {
@@ -1307,18 +1341,19 @@ function renderMaterials(list) {
             `;
         }
 
-        if (topicId) {
-            actionButtonsHtml += `
-                <button onclick="startExamWithTopic(${topicId})" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
-                    🎯 Practicar Preguntas
-                </button>
-            `;
-        }
+        actionButtonsHtml += `
+            <button onclick="openPracticeMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
+                🎯 Practicar este Documento
+            </button>
+        `;
 
         card.innerHTML = `
-            <div class="flex items-center justify-between text-xs">
-                <span class="font-bold text-white text-sm">${m.title}</span>
-                <div class="flex items-center gap-2">
+            <div class="flex items-center justify-between text-xs gap-3">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">ID #${m.id}</span>
+                    <span class="font-bold text-white text-sm truncate">${m.title}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
                     <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold ${badgeClass}">
                         ${badgeText}
                     </span>
@@ -1452,6 +1487,8 @@ function openPdfViewer(id) {
 
     document.getElementById('pdf-viewer-title').textContent = mat.title;
     document.getElementById('pdf-viewer-topic').textContent = mat.topic ? mat.topic.name : 'General';
+    const pdfIdBadge = document.getElementById('pdf-viewer-id-badge');
+    if (pdfIdBadge) pdfIdBadge.textContent = `ID #${mat.id}`;
 
     const downloadBtn = document.getElementById('pdf-viewer-btn-download');
     downloadBtn.href = fileUrl;
@@ -1488,6 +1525,8 @@ function openViewMaterialModal(id) {
 
     document.getElementById('view-mat-title').textContent = mat.title;
     document.getElementById('view-mat-topic').textContent = mat.topic ? mat.topic.name : 'General';
+    const viewIdBadge = document.getElementById('view-mat-id-badge');
+    if (viewIdBadge) viewIdBadge.textContent = `ID #${mat.id}`;
     const words = activeMaterialText ? activeMaterialText.trim().split(/\s+/).length : 0;
     document.getElementById('view-mat-words').textContent = `${words} palabras extraídas`;
 
@@ -1564,16 +1603,14 @@ function openViewMaterialModal(id) {
         downloadBtn.classList.remove('hidden');
     }
 
-    // Botón Practicar este Tema
+    // Botón Practicar este Documento
     const practiceBtn = document.getElementById('view-mat-btn-practice');
-    if (mat.topic && mat.topic.id) {
+    if (practiceBtn) {
         practiceBtn.onclick = () => {
             closeModal('modal-view-material');
-            startExamWithTopic(mat.topic.id);
+            openPracticeMaterialModal(mat.id);
         };
         practiceBtn.classList.remove('hidden');
-    } else {
-        practiceBtn.classList.add('hidden');
     }
 
     openModal('modal-view-material');
@@ -1996,6 +2033,8 @@ async function submitCreateQuestion() {
     const optB = document.getElementById('new-q-opt-b').value.trim();
     const optC = document.getElementById('new-q-opt-c').value.trim();
     const optD = document.getElementById('new-q-opt-d').value.trim();
+    const matIdVal = document.getElementById('new-q-material-id') ? document.getElementById('new-q-material-id').value : '';
+    const materialId = matIdVal ? parseInt(matIdVal, 10) : null;
 
     if (!stem || !explanation || !optA || !optB) {
         showToast('Completa al menos el enunciado, la explicación y las opciones A y B.', 'warning');
@@ -2016,6 +2055,7 @@ async function submitCreateQuestion() {
     const payload = {
         topicId,
         difficulty,
+        materialId,
         stem,
         codeSnippet,
         explanation,
@@ -2040,6 +2080,9 @@ async function submitCreateQuestion() {
             document.getElementById('new-q-opt-b').value = '';
             document.getElementById('new-q-opt-c').value = '';
             document.getElementById('new-q-opt-d').value = '';
+            if (document.getElementById('new-q-material-id')) {
+                document.getElementById('new-q-material-id').value = '';
+            }
             await loadQuestions();
             await loadDashboard();
             showToast('¡Pregunta creada y añadida al banco y al sistema SM-2!', 'success');
@@ -2060,6 +2103,7 @@ function loadSampleImportJson() {
     const sample = [
         {
             "topicId": 2,
+            "materialId": 1,
             "stem": "¿Qué parámetro de resultado en una búsqueda FHIR R4 permite solicitar al servidor únicamente el número total de coincidencias sin devolver los recursos?",
             "codeSnippet": "GET [base]/Observation?_summary=count",
             "explanation": "El parámetro _summary=count indica al servidor que devuelva un Bundle con el atributo total poblado pero sin entradas entry.",
@@ -2085,8 +2129,19 @@ async function submitImportJson() {
         return;
     }
 
+    const topicSelect = document.getElementById('import-json-topic-id');
+    const matSelect = document.getElementById('import-json-material-id');
+    const defaultTopicId = topicSelect && topicSelect.value ? topicSelect.value : null;
+    const defaultMaterialId = matSelect && matSelect.value ? matSelect.value : null;
+
+    let url = '/api/questions/import';
+    const params = [];
+    if (defaultTopicId) params.push(`defaultTopicId=${encodeURIComponent(defaultTopicId)}`);
+    if (defaultMaterialId) params.push(`defaultMaterialId=${encodeURIComponent(defaultMaterialId)}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
     try {
-        const resp = await fetch('/api/questions/import', {
+        const resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: jsonText
@@ -2095,6 +2150,8 @@ async function submitImportJson() {
         if (resp.ok && data.success) {
             closeModal('modal-import-json');
             document.getElementById('import-json-textarea').value = '';
+            if (topicSelect) topicSelect.value = '';
+            if (matSelect) matSelect.value = '';
             await loadQuestions();
             await loadDashboard();
             showToast(`¡Importación exitosa! Se añadieron ${data.importedCount} preguntas al banco.`, 'success');
@@ -2103,6 +2160,148 @@ async function submitImportJson() {
         }
     } catch (e) {
         showToast('Error al procesar el JSON: ' + e.message, 'error');
+    }
+}
+
+// =================== PRÁCTICA DE APUNTE O DOCUMENTO CONCRETO ===================
+let activePracticeMaterialId = null;
+let activePracticeMode = 'TUTOR';
+let activePracticeQuestionCount = 10;
+
+async function openPracticeMaterialModal(id) {
+    const mat = allMaterials.find(m => m.id === id);
+    if (!mat) return;
+
+    activePracticeMaterialId = id;
+    activePracticeMode = 'TUTOR';
+    activePracticeQuestionCount = 10;
+
+    selectPracticeMaterialMode('TUTOR');
+    selectPracticeQuestionCount(10);
+
+    const titleEl = document.getElementById('practice-mat-title');
+    const badgeEl = document.getElementById('practice-mat-badge');
+    const idBadgeEl = document.getElementById('practice-mat-id-badge');
+    const topicEl = document.getElementById('practice-mat-topic');
+    const linkedEl = document.getElementById('practice-mat-linked-count');
+    const totalEl = document.getElementById('practice-mat-total-count');
+
+    if (titleEl) titleEl.textContent = mat.title;
+    if (badgeEl) badgeEl.textContent = mat.sourceType || 'DOCUMENTO';
+    if (idBadgeEl) idBadgeEl.textContent = `ID #${mat.id}`;
+    if (topicEl) topicEl.textContent = mat.topic ? mat.topic.name : 'General';
+    if (linkedEl) linkedEl.textContent = 'Cargando preguntas vinculadas...';
+    if (totalEl) totalEl.textContent = 'Cargando banco...';
+
+    openModal('modal-practice-material');
+
+    try {
+        const resp = await fetch(`/api/materials/${id}/practice-info`);
+        if (resp.ok) {
+            const info = await resp.json();
+            if (linkedEl) linkedEl.textContent = `${info.linkedQuestionsCount} pregunta${info.linkedQuestionsCount === 1 ? '' : 's'}`;
+            if (totalEl) totalEl.textContent = `${info.relevantQuestionsCount} preguntas en este tema`;
+        }
+    } catch (e) {
+        console.error('Error cargando info de práctica del documento:', e);
+    }
+}
+
+function selectPracticeMaterialMode(mode) {
+    activePracticeMode = mode;
+    const tutorBtn = document.getElementById('practice-mode-tutor-btn');
+    const simBtn = document.getElementById('practice-mode-sim-btn');
+
+    if (mode === 'TUTOR') {
+        if (tutorBtn) {
+            tutorBtn.className = 'p-3 rounded-xl border bg-blue-600/20 border-blue-500 text-white text-left cursor-pointer transition';
+            const desc = tutorBtn.querySelector('div:last-child');
+            if (desc) desc.className = 'text-[10px] text-slate-300 mt-1';
+        }
+        if (simBtn) {
+            simBtn.className = 'p-3 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 hover:text-white text-left cursor-pointer transition';
+            const desc = simBtn.querySelector('div:last-child');
+            if (desc) desc.className = 'text-[10px] text-slate-400 mt-1';
+        }
+    } else {
+        if (simBtn) {
+            simBtn.className = 'p-3 rounded-xl border bg-blue-600/20 border-blue-500 text-white text-left cursor-pointer transition';
+            const desc = simBtn.querySelector('div:last-child');
+            if (desc) desc.className = 'text-[10px] text-slate-300 mt-1';
+        }
+        if (tutorBtn) {
+            tutorBtn.className = 'p-3 rounded-xl border bg-slate-900 border-slate-700 text-slate-400 hover:text-white text-left cursor-pointer transition';
+            const desc = tutorBtn.querySelector('div:last-child');
+            if (desc) desc.className = 'text-[10px] text-slate-400 mt-1';
+        }
+    }
+}
+
+function selectPracticeQuestionCount(cnt) {
+    activePracticeQuestionCount = cnt;
+    const buttons = document.querySelectorAll('.practice-count-btn');
+    buttons.forEach(btn => {
+        const text = btn.textContent.trim();
+        const isMatch = (cnt === 'all' && text === 'Todas') || (String(cnt) === text);
+        if (isMatch) {
+            btn.className = 'practice-count-btn active py-2 text-center rounded-xl bg-blue-600 text-white font-semibold cursor-pointer';
+        } else {
+            btn.className = 'practice-count-btn py-2 text-center rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500 text-slate-300 font-semibold cursor-pointer';
+        }
+    });
+}
+
+function startPracticeForActiveMaterial() {
+    if (!activePracticeMaterialId) return;
+
+    const count = activePracticeQuestionCount === 'all' ? 50 : parseInt(activePracticeQuestionCount, 10);
+    closeModal('modal-practice-material');
+
+    executeStartExam({
+        mode: activePracticeMode,
+        questionCount: count,
+        materialId: activePracticeMaterialId,
+        topicId: null
+    });
+}
+
+async function generateQuestionForActiveMaterial() {
+    if (!activePracticeMaterialId) return;
+
+    const btn = document.getElementById('btn-practice-generate-q');
+    const status = document.getElementById('practice-generate-status');
+    const linkedEl = document.getElementById('practice-mat-linked-count');
+
+    if (btn) btn.classList.add('hidden');
+    if (status) status.classList.remove('hidden');
+
+    try {
+        const resp = await fetch(`/api/materials/${activePracticeMaterialId}/generate-question`, {
+            method: 'POST'
+        });
+
+        if (resp.ok) {
+            const newQ = await resp.json();
+            showToast('¡Pregunta generada e indexada para este documento con éxito!', 'success');
+            
+            // Refrescar conteo en modal
+            const infoResp = await fetch(`/api/materials/${activePracticeMaterialId}/practice-info`);
+            if (infoResp.ok) {
+                const info = await infoResp.json();
+                if (linkedEl) linkedEl.textContent = `${info.linkedQuestionsCount} pregunta${info.linkedQuestionsCount === 1 ? '' : 's'}`;
+            }
+            // Recargar banco de preguntas
+            loadQuestions();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo generar la pregunta a partir del texto.', 'error');
+        }
+    } catch (e) {
+        console.error('Error generando pregunta:', e);
+        showToast('Error de conexión al generar la pregunta.', 'error');
+    } finally {
+        if (btn) btn.classList.remove('hidden');
+        if (status) status.classList.add('hidden');
     }
 }
 

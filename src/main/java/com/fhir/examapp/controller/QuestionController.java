@@ -45,9 +45,12 @@ public class QuestionController {
     }
 
     @PostMapping("/import")
-    public ResponseEntity<Map<String, Object>> importQuestions(@RequestBody String jsonPayload) {
+    public ResponseEntity<Map<String, Object>> importQuestions(
+            @RequestBody String jsonPayload,
+            @RequestParam(required = false) Long defaultTopicId,
+            @RequestParam(required = false) Long defaultMaterialId) {
         try {
-            int imported = questionBankService.importQuestionsFromJson(jsonPayload);
+            int imported = questionBankService.importQuestionsFromJson(jsonPayload, defaultTopicId, defaultMaterialId);
             return ResponseEntity.ok(Map.of("success", true, "importedCount", imported));
         } catch (IOException e) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
