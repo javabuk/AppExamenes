@@ -107,4 +107,45 @@ class ExamEngineServiceTest {
         assertEquals(1, result.getReviews().size());
         assertTrue(result.getReviews().get(0).getCorrect());
     }
+
+    @Test
+    void testStartExam_RandomizesQuestionOrder() {
+        SyllabusTopic topic = new SyllabusTopic("REST", "REST", 100.0, "PENDING");
+        topic.setId(1L);
+
+        List<Question> questions = new java.util.ArrayList<>();
+        for (long i = 1; i <= 10; i++) {
+            Question q = new Question();
+            q.setId(i);
+            q.setTopic(topic);
+            q.setStem("Pregunta número " + i);
+            q.addOption(new QuestionOption("A", "Opción A", true, "Correcta"));
+            questions.add(q);
+        }
+
+        when(topicRepository.findAll()).thenReturn(List.of(topic));
+        when(questionRepository.findByTopicIdAndVerifiedTrue(1L)).thenReturn(new java.util.ArrayList<>(questions));
+        when(questionRepository.findByVerifiedTrue()).thenReturn(new java.util.ArrayList<>(questions));
+
+        // Iniciar varios exámenes y comprobar que no todos tienen el orden idéntico secuencial 1..10
+        boolean foundDifferentOrder = false;
+        List<Long> firstOrder = null;
+
+        for (int run = 0; run < 10; run++) {
+            when(questionRepository.findByVerifiedTrue()).thenReturn(new java.util.ArrayList<>(questions));
+            ExamStartRequest req = new ExamStartRequest("TUTOR", 10, null);
+            ExamSessionDTO session = examEngineService.startExam(req);
+            assertEquals(10, session.getQuestions().size());
+
+            List<Long> currentOrder = session.getQuestions().stream().map(com.fhir.examapp.dto.ExamQuestionDTO::getId).toList();
+            if (firstOrder == null) {
+                firstOrder = currentOrder;
+            } else if (!firstOrder.equals(currentOrder)) {
+                foundDifferentOrder = true;
+                break;
+            }
+        }
+
+        assertTrue(foundDifferentOrder, "El orden de las preguntas debe variar aleatoriamente entre intentos");
+    }
 }

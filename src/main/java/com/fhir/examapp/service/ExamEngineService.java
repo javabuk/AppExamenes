@@ -72,6 +72,10 @@ public class ExamEngineService {
             }
         }
 
+        // Asegurar que el orden de presentación de las preguntas sea siempre aleatorio en cualquier modo/examen
+        selectedQuestions = new ArrayList<>(selectedQuestions);
+        Collections.shuffle(selectedQuestions);
+
         // Crear intento en BBDD
         ExamAttempt attempt = new ExamAttempt(mode);
         attempt = attemptRepository.save(attempt);
@@ -237,6 +241,7 @@ public class ExamEngineService {
         // 1. Preguntas explícitamente vinculadas a este material
         List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
         List<Question> result = new ArrayList<>(linked);
+        Collections.shuffle(result);
         Set<Long> pickedIds = linked.stream().map(Question::getId).collect(Collectors.toSet());
 
         // 2. Si faltan preguntas para la cuota solicitada, buscar preguntas del mismo tema
@@ -275,11 +280,9 @@ public class ExamEngineService {
             }
         }
 
-        if (!"TUTOR".equalsIgnoreCase(mode)) {
-            Collections.shuffle(result);
-        }
+        Collections.shuffle(result);
 
-        return result.size() > count ? result.subList(0, count) : result;
+        return result.size() > count ? new ArrayList<>(result.subList(0, count)) : result;
     }
 
     private Set<String> extractKeywords(String text) {

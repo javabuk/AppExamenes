@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -115,10 +116,13 @@ public class SpacedRepetitionService {
         java.util.Map<Long, Question> questionMap = questionRepository.findAllById(questionIds).stream()
                 .collect(Collectors.toMap(Question::getId, java.util.function.Function.identity()));
 
-        return dueStates.stream()
+        List<FlashcardDTO> list = dueStates.stream()
                 .map(s -> toFlashcardDTO(s, questionMap.get(s.getQuestionId())))
                 .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
+
+        Collections.shuffle(list);
+        return list;
     }
 
     @Transactional(readOnly = true)
