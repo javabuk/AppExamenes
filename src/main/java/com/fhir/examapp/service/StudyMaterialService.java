@@ -182,6 +182,89 @@ public class StudyMaterialService {
         return studyMaterialRepository.save(material);
     }
 
+    /**
+     * Guarda e indexa un archivo de apuntes en formato Markdown (.md, .markdown, .txt).
+     */
+    public StudyMaterial saveMarkdownFile(MultipartFile file, Long topicId, String customTitle) throws IOException {
+        SyllabusTopic topic = syllabusTopicRepository.findById(topicId)
+                .orElseThrow(() -> new IllegalArgumentException("Tema de temario no encontrado: " + topicId));
+
+        String title = (customTitle != null && !customTitle.trim().isEmpty())
+                ? customTitle.trim()
+                : (file.getOriginalFilename() != null ? file.getOriginalFilename() : "Apuntes Markdown");
+
+        String contentText = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        if (contentText.isBlank()) {
+            contentText = "(Archivo Markdown vacío)";
+        }
+
+        // Guardar archivo físico en ./data/materials/
+        java.io.File storageDir = new java.io.File("./data/materials");
+        if (!storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+        String safeOriginal = file.getOriginalFilename() != null ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_") : "material.md";
+        if (!safeOriginal.toLowerCase().endsWith(".md")) {
+            safeOriginal += ".md";
+        }
+        String storedFilename = System.currentTimeMillis() + "_" + safeOriginal;
+        java.io.File targetFile = new java.io.File(storageDir, storedFilename);
+        java.nio.file.Files.write(targetFile.toPath(), file.getBytes());
+
+        StudyMaterial material = new StudyMaterial(
+                topic,
+                "MARKDOWN",
+                title,
+                contentText,
+                safeOriginal
+        );
+        material.setFilePath(targetFile.getPath());
+
+        return studyMaterialRepository.save(material);
+    }
+
+    /**
+     * Guarda e indexa contenido de apuntes escrito directamente en formato Markdown.
+     */
+    public StudyMaterial saveMarkdownText(Long topicId, String title, String markdownText) throws IOException {
+        SyllabusTopic topic = syllabusTopicRepository.findById(topicId)
+                .orElseThrow(() -> new IllegalArgumentException("Tema de temario no encontrado: " + topicId));
+
+        if (title == null || title.trim().isEmpty()) {
+            title = "Apuntes Markdown";
+        } else {
+            title = title.trim();
+        }
+
+        if (markdownText == null || markdownText.trim().isEmpty()) {
+            throw new IllegalArgumentException("El contenido Markdown no puede estar vacío.");
+        }
+
+        // Guardar archivo físico .md en ./data/materials/
+        java.io.File storageDir = new java.io.File("./data/materials");
+        if (!storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+        String safeTitle = title.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (!safeTitle.toLowerCase().endsWith(".md")) {
+            safeTitle += ".md";
+        }
+        String storedFilename = System.currentTimeMillis() + "_" + safeTitle;
+        java.io.File targetFile = new java.io.File(storageDir, storedFilename);
+        java.nio.file.Files.writeString(targetFile.toPath(), markdownText, java.nio.charset.StandardCharsets.UTF_8);
+
+        StudyMaterial material = new StudyMaterial(
+                topic,
+                "MARKDOWN",
+                title,
+                markdownText,
+                safeTitle
+        );
+        material.setFilePath(targetFile.getPath());
+
+        return studyMaterialRepository.save(material);
+    }
+
     public StudyMaterial createManualNote(Long topicId, String title, String content, String referenceUrl) {
         SyllabusTopic topic = syllabusTopicRepository.findById(topicId)
                 .orElseThrow(() -> new IllegalArgumentException("Tema de temario no encontrado: " + topicId));

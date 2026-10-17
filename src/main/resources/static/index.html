@@ -7,8 +7,14 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>FHIR Cert Master - Preparación Oficial HL7 FHIR</title>
+    <!-- Favicon Oficial idéntico al logo de cabecera (🔥 sobre gradiente azul-índigo) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked.js for High-Fidelity Markdown Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body {
@@ -249,7 +255,114 @@
             will-change: transform, opacity;
         }
 
-        /* 10. Strict Accessibility Support: Prefers-Reduced-Motion */
+        /* 10. Markdown Rendered Preview Typography */
+        .markdown-body {
+            color: #cbd5e1;
+            font-size: 0.875rem;
+            line-height: 1.7;
+        }
+        .markdown-body h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ffffff;
+            margin-top: 1.25rem;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+        }
+        .markdown-body h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 1.25rem;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+        }
+        .markdown-body h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-body h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #93c5fd;
+            margin-top: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+        .markdown-body p {
+            margin-bottom: 0.85rem;
+        }
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 0.85rem;
+            padding-left: 1.5rem;
+        }
+        .markdown-body ul {
+            list-style-type: disc;
+        }
+        .markdown-body ol {
+            list-style-type: decimal;
+        }
+        .markdown-body li {
+            margin-bottom: 0.25rem;
+        }
+        .markdown-body blockquote {
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #94a3b8;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 0 0.5rem 0.5rem 0;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+        .markdown-body code:not(pre code) {
+            background-color: rgba(15, 23, 42, 0.8);
+            color: #34d399;
+            padding: 0.15rem 0.4rem;
+            border-radius: 0.375rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            border: 1px solid rgba(51, 65, 85, 0.6);
+        }
+        .markdown-body pre {
+            background-color: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            color: #34d399;
+        }
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+        .markdown-body th, .markdown-body td {
+            border: 1px solid #334155;
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+        .markdown-body th {
+            background-color: rgba(30, 41, 59, 0.8);
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .markdown-body tr:nth-child(even) {
+            background-color: rgba(15, 23, 42, 0.4);
+        }
+        .markdown-body a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+
+        /* 11. Strict Accessibility Support: Prefers-Reduced-Motion */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.001ms !important;
@@ -831,15 +944,18 @@
                 <!-- Upload & Import Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-700 pb-3">
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <button id="tab-mat-url-btn" type="button" onclick="switchMaterialInputMode('url')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer">
                                 🌐 Importar desde URL (ej: HL7 FHIR Spec)
                             </button>
                             <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
                                 📁 Cargar PDF Local (PDFBox)
                             </button>
+                            <button id="tab-mat-md-btn" type="button" onclick="switchMaterialInputMode('markdown')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                📝 Material Markdown (.md / Editor)
+                            </button>
                         </div>
-                        <span class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
+                        <span id="mat-input-badge-hint" class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
                     </div>
 
                     <!-- Mode 1: URL Import Form -->
@@ -869,7 +985,7 @@
                         </div>
 
                         <div class="flex items-center gap-3 pt-1">
-                            <button id="btn-import-url-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/30">
+                            <button id="btn-import-url-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/30">
                                 📥 Descargar, Extraer e Indexar Contenido
                             </button>
                             <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
@@ -895,12 +1011,64 @@
 
                         <div>
                             <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo PDF Local:</label>
-                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500">
+                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer">
                         </div>
 
-                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
+                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition cursor-pointer">
                             Procesar e Indexar con PDFBox
                         </button>
+                    </form>
+
+                    <!-- Mode 3: Markdown Material Form -->
+                    <form id="import-md-form" onsubmit="submitMarkdownMaterial(event)" class="hidden space-y-4">
+                        <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60 gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-semibold text-slate-400">Modo:</span>
+                                <button type="button" id="md-mode-file-btn" onclick="toggleMarkdownSubmode('file')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer">
+                                    📁 Subir Archivo .md
+                                </button>
+                                <button type="button" id="md-mode-text-btn" onclick="toggleMarkdownSubmode('text')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">
+                                    ✏️ Escribir / Pegar Markdown
+                                </button>
+                            </div>
+                            <button type="button" onclick="loadSampleMarkdown()" class="text-xs text-blue-400 hover:underline cursor-pointer">
+                                💡 Cargar Plantilla FHIR Markdown
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                                <select id="import-md-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título del Material:</label>
+                                <input id="import-md-title" type="text" placeholder="Ej: Apuntes Resumen - Recursos y Paradigmas FHIR R4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                            </div>
+                        </div>
+
+                        <!-- Submode A: File Input -->
+                        <div id="md-file-input-container">
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo Markdown (.md, .markdown, .txt):</label>
+                            <input id="import-md-file" type="file" accept=".md,.markdown,.txt" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer">
+                        </div>
+
+                        <!-- Submode B: Textarea Editor -->
+                        <div id="md-text-input-container" class="hidden space-y-1">
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Editor / Contenido Markdown:</label>
+                            <textarea id="import-md-text" rows="8" placeholder="# Guía Rápida FHIR R4&#10;&#10;## Paradigma RESTful&#10;FHIR utiliza las operaciones estándar HTTP..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
+                        </div>
+
+                        <div class="flex items-center gap-3 pt-1">
+                            <button id="btn-import-md-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/30">
+                                📝 Guardar e Indexar Markdown
+                            </button>
+                            <span id="import-md-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                <span class="animate-spin">⏳</span> Guardando e indexando material...
+                            </span>
+                        </div>
                     </form>
                 </div>
 
@@ -1077,38 +1245,63 @@
         </div>
     </div>
 
-    <!-- Modal: Visor Completo de Material / PDF -->
+    <!-- Modal: Visor Completo de Material / PDF / Markdown -->
     <div id="modal-view-material" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-3xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col modal-box">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-4xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col modal-box">
             <div class="flex items-center justify-between border-b border-slate-700 pb-3">
-                <div>
-                    <h3 id="view-mat-title" class="text-lg font-bold text-white">Título del Documento</h3>
-                    <div class="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-                        <span id="view-mat-topic" class="text-blue-400 font-semibold">Tema</span>
+                <div class="overflow-hidden">
+                    <div class="flex items-center gap-2">
+                        <span id="view-mat-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30">DOCUMENTO</span>
+                        <h3 id="view-mat-title" class="text-base md:text-lg font-bold text-white truncate max-w-md md:max-w-xl">Título del Documento</h3>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                        <span id="view-mat-topic" class="text-blue-400 font-semibold truncate">Tema</span>
                         <span>•</span>
                         <span id="view-mat-words" class="font-mono text-emerald-400">0 palabras</span>
                         <span>•</span>
                         <a id="view-mat-link" href="#" target="_blank" class="hidden text-blue-400 hover:underline font-mono">Abrir URL Original ↗</a>
                     </div>
                 </div>
-                <button onclick="closeModal('modal-view-material')" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+                <div class="flex items-center gap-3 shrink-0">
+                    <!-- Toggle Rendered / Raw Markdown buttons (only displayed for Markdown) -->
+                    <div id="view-mat-md-toggle" class="hidden items-center bg-slate-900 border border-slate-700 rounded-xl p-0.5 text-xs">
+                        <button type="button" id="btn-md-preview-mode" onclick="setMarkdownViewMode('preview')" class="px-3 py-1 rounded-lg font-semibold bg-blue-600 text-white transition cursor-pointer">
+                            👁️ Renderizado
+                        </button>
+                        <button type="button" id="btn-md-raw-mode" onclick="setMarkdownViewMode('raw')" class="px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition cursor-pointer">
+                            📄 Raw .md
+                        </button>
+                    </div>
+                    <button onclick="closeModal('modal-view-material')" class="text-slate-400 hover:text-white text-lg font-bold p-1 cursor-pointer">✕</button>
+                </div>
             </div>
-            <div class="flex-1 overflow-y-auto bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed select-text" id="view-mat-content">
-                Cargando texto extraído con Apache PDFBox...
+
+            <!-- Content Container 1: Formatted Markdown Container -->
+            <div id="view-mat-rendered" class="hidden flex-1 overflow-y-auto bg-slate-950 p-6 rounded-xl border border-slate-800 markdown-body select-text leading-relaxed">
+                <!-- Rendered Markdown HTML -->
             </div>
+
+            <!-- Content Container 2: Plain text / Code / Raw container -->
+            <div id="view-mat-content" class="flex-1 overflow-y-auto bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed select-text">
+                Cargando texto...
+            </div>
+
             <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-700">
                 <div class="flex flex-wrap items-center gap-2">
                     <button id="view-mat-btn-pdf" class="hidden px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition flex items-center gap-1.5 cursor-pointer">
                         📄 Ver PDF Original
                     </button>
-                    <button id="view-mat-btn-practice" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+                    <a id="view-mat-btn-download" href="#" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1.5 cursor-pointer">
+                        📥 Descargar Archivo
+                    </a>
+                    <button id="view-mat-btn-practice" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
                         🎯 Practicar este Tema
                     </button>
-                    <button id="view-mat-btn-copy" onclick="copyMaterialText()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">
+                    <button id="view-mat-btn-copy" onclick="copyMaterialText()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
                         📋 Copiar Texto
                     </button>
                 </div>
-                <button onclick="closeModal('modal-view-material')" class="px-4 py-1.5 text-xs rounded-lg bg-slate-700 text-slate-300">Cerrar</button>
+                <button onclick="closeModal('modal-view-material')" class="px-4 py-1.5 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 cursor-pointer">Cerrar</button>
             </div>
         </div>
     </div>
@@ -1184,6 +1377,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.6"></script>
+    <script src="/app.js?v=2.0.7"></script>
 </body>
 </html>

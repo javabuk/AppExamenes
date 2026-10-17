@@ -244,13 +244,13 @@ async function loadTopics() {
 }
 
 function populateTopicSelects() {
-    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id'];
+    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id'];
     selects.forEach(selectId => {
         const el = document.getElementById(selectId);
         if (!el) return;
         const firstOption = el.options[0];
         el.innerHTML = '';
-        if (firstOption && selectId !== 'upload-topic-id' && selectId !== 'new-q-topic-id' && selectId !== 'import-url-topic-id') el.appendChild(firstOption);
+        if (firstOption && selectId !== 'upload-topic-id' && selectId !== 'new-q-topic-id' && selectId !== 'import-url-topic-id' && selectId !== 'import-md-topic-id') el.appendChild(firstOption);
 
         allTopics.forEach(t => {
             const opt = document.createElement('option');
@@ -1240,49 +1240,76 @@ function renderMaterials(list) {
         const topicName = m.topic ? m.topic.name : 'General';
         const topicId = m.topic ? m.topic.id : null;
 
-        // Determinar si es URL externa o PDF con archivo físico
-        const isUrl = m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://'));
-        const hasPdfFile = Boolean(m.filePath);
-        const isPdf = hasPdfFile || m.sourceType === 'COURSE_PDF' || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().includes('.pdf'));
+        // Determinar tipo de documento: Markdown, PDF o URL
+        const isMarkdown = m.sourceType === 'MARKDOWN' || (m.filePath && m.filePath.toLowerCase().endsWith('.md')) || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().endsWith('.md'));
+        const isUrl = !isMarkdown && m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://'));
+        const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
+        const isPdf = !isMarkdown && (hasPdfFile || m.sourceType === 'COURSE_PDF' || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().includes('.pdf')));
 
         // Extract a clean, single-paragraph preview excerpt (max 240 chars)
         const cleanContent = (m.contentText || '').trim().replace(/\s+/g, ' ');
         const excerpt = cleanContent.length > 240 ? cleanContent.substring(0, 240) + '...' : cleanContent;
 
+        // Badge de tipo de documento
+        let badgeClass = 'bg-slate-700 text-slate-300';
+        let badgeText = m.sourceType || 'DOCUMENTO';
+
+        if (isMarkdown) {
+            badgeClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            badgeText = '📝 MARKDOWN';
+        } else if (hasPdfFile || isPdf) {
+            badgeClass = 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
+            badgeText = '📄 PDF (PDFBox)';
+        } else if (isUrl) {
+            badgeClass = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+            badgeText = '🌐 WEB URL';
+        }
+
         // Construir botones según el tipo de documento
         let actionButtonsHtml = '';
 
-        if (hasPdfFile) {
+        if (isMarkdown) {
             actionButtonsHtml += `
-                <button onclick="openPdfViewer(${m.id})" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
-                    📄 Ver PDF Original
+                <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer">
+                    👁️ Ver Markdown
                 </button>
+                <a href="/api/materials/${m.id}/file?download=true" download class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold transition flex items-center gap-1.5 cursor-pointer">
+                    📥 Descargar .md
+                </a>
             `;
-        } else if (isPdf && isUrl) {
+        } else {
+            if (hasPdfFile) {
+                actionButtonsHtml += `
+                    <button onclick="openPdfViewer(${m.id})" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
+                        📄 Ver PDF Original
+                    </button>
+                `;
+            } else if (isPdf && isUrl) {
+                actionButtonsHtml += `
+                    <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
+                        📄 Ver PDF Remoto ↗
+                    </button>
+                `;
+            }
+
+            if (isUrl) {
+                actionButtonsHtml += `
+                    <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
+                        🌐 Abrir Web Original ↗
+                    </button>
+                `;
+            }
+
             actionButtonsHtml += `
-                <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
-                    📄 Ver PDF Remoto ↗
+                <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer">
+                    📖 Ver Texto Extraído
                 </button>
             `;
         }
-
-        if (isUrl) {
-            actionButtonsHtml += `
-                <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
-                    🌐 Abrir Web Original ↗
-                </button>
-            `;
-        }
-
-        actionButtonsHtml += `
-            <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer">
-                📖 Ver Texto Extraído
-            </button>
-        `;
 
         if (topicId) {
             actionButtonsHtml += `
-                <button onclick="startExamWithTopic(${topicId})" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer">
+                <button onclick="startExamWithTopic(${topicId})" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
                     🎯 Practicar Preguntas
                 </button>
             `;
@@ -1292,8 +1319,8 @@ function renderMaterials(list) {
             <div class="flex items-center justify-between text-xs">
                 <span class="font-bold text-white text-sm">${m.title}</span>
                 <div class="flex items-center gap-2">
-                    <span class="px-2 py-0.5 rounded ${hasPdfFile ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : isUrl ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-slate-700 text-slate-300'} font-mono text-[10px] font-bold">
-                        ${hasPdfFile ? 'PDF (PDFBox)' : m.sourceType}
+                    <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold ${badgeClass}">
+                        ${badgeText}
                     </span>
                     <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">${wordsCount} palabras</span>
                 </div>
@@ -1306,10 +1333,13 @@ function renderMaterials(list) {
                     <a href="${m.referenceUrlOrPage}" target="_blank" class="text-blue-400 hover:underline flex items-center gap-1 font-mono text-[11px]">
                         🔗 ${m.referenceUrlOrPage.length > 55 ? m.referenceUrlOrPage.substring(0, 55) + '...' : m.referenceUrlOrPage} ↗
                     </a>
+                ` : (isMarkdown ? `
+                    <span class="text-slate-600">•</span>
+                    <span class="text-emerald-400 font-mono text-[11px]">📝 Documento Markdown guardado</span>
                 ` : (m.filePath ? `
                     <span class="text-slate-600">•</span>
                     <span class="text-slate-400 font-mono text-[11px]">📁 Archivo local guardado</span>
-                ` : '')}
+                ` : ''))}
             </div>
 
             <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed overflow-hidden">
@@ -1331,6 +1361,87 @@ function renderMaterials(list) {
 
 let activeMaterialText = '';
 let currentPdfId = null;
+
+// =================== RENDERIZADO MARKDOWN Y MODO DE VISTA ===================
+function renderMarkdown(md) {
+    if (!md) return '<p class="text-slate-500 italic">Documento sin contenido textual.</p>';
+
+    // Si marked.js está cargado globalmente en window
+    if (typeof window.marked !== 'undefined') {
+        try {
+            if (typeof window.marked.parse === 'function') {
+                return window.marked.parse(md);
+            } else if (typeof window.marked === 'function') {
+                return window.marked(md);
+            }
+        } catch (e) {
+            console.warn('Error procesando markdown con marked.js, usando parser fallback:', e);
+        }
+    }
+
+    // Parser fallback nativo resiliente (soporta headers, código, listas, negritas, links, citas)
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    let raw = escapeHtml(md);
+
+    // Bloques de código ```lang ... ```
+    raw = raw.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+        return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
+    });
+
+    // Código en línea `...`
+    raw = raw.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Encabezados (#, ##, ###, ####)
+    raw = raw.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+    raw = raw.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    raw = raw.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    raw = raw.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Negrita y cursiva
+    raw = raw.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    raw = raw.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Blockquotes
+    raw = raw.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+    // Listas desordenadas
+    raw = raw.replace(/^\s*-\s+(.*$)/gim, '<ul><li>$1</li></ul>');
+    raw = raw.replace(/<\/ul>\s*<ul>/g, '');
+
+    // Enlaces [texto](url)
+    raw = raw.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Párrafos dobles
+    raw = raw.replace(/\n\n+/g, '</p><p>');
+    return `<p>${raw}</p>`;
+}
+
+function setMarkdownViewMode(mode) {
+    const renderedDiv = document.getElementById('view-mat-rendered');
+    const rawContentDiv = document.getElementById('view-mat-content');
+    const previewBtn = document.getElementById('btn-md-preview-mode');
+    const rawBtn = document.getElementById('btn-md-raw-mode');
+
+    if (mode === 'preview') {
+        if (renderedDiv) renderedDiv.classList.remove('hidden');
+        if (rawContentDiv) rawContentDiv.classList.add('hidden');
+        if (previewBtn) previewBtn.className = 'px-3 py-1 rounded-lg font-semibold bg-blue-600 text-white transition cursor-pointer shadow-sm';
+        if (rawBtn) rawBtn.className = 'px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition cursor-pointer';
+    } else {
+        if (renderedDiv) renderedDiv.classList.add('hidden');
+        if (rawContentDiv) rawContentDiv.classList.remove('hidden');
+        if (rawBtn) rawBtn.className = 'px-3 py-1 rounded-lg font-semibold bg-blue-600 text-white transition cursor-pointer shadow-sm';
+        if (previewBtn) previewBtn.className = 'px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition cursor-pointer';
+    }
+}
 
 function openPdfViewer(id) {
     const mat = allMaterials.find(m => m.id === id);
@@ -1370,13 +1481,57 @@ function openViewMaterialModal(id) {
     const mat = allMaterials.find(m => m.id === id);
     if (!mat) return;
 
-    activeMaterialText = mat.contentText;
+    activeMaterialText = mat.contentText || '';
+    const isMarkdown = mat.sourceType === 'MARKDOWN' || (mat.filePath && mat.filePath.toLowerCase().endsWith('.md')) || (mat.referenceUrlOrPage && mat.referenceUrlOrPage.toLowerCase().endsWith('.md'));
+    const hasPdfFile = Boolean(mat.filePath && mat.filePath.toLowerCase().endsWith('.pdf'));
+    const isPdf = !isMarkdown && (hasPdfFile || mat.sourceType === 'COURSE_PDF' || (mat.referenceUrlOrPage && mat.referenceUrlOrPage.toLowerCase().includes('.pdf')));
+
     document.getElementById('view-mat-title').textContent = mat.title;
     document.getElementById('view-mat-topic').textContent = mat.topic ? mat.topic.name : 'General';
-    const words = mat.contentText ? mat.contentText.trim().split(/\s+/).length : 0;
+    const words = activeMaterialText ? activeMaterialText.trim().split(/\s+/).length : 0;
     document.getElementById('view-mat-words').textContent = `${words} palabras extraídas`;
-    document.getElementById('view-mat-content').textContent = mat.contentText;
 
+    // Configurar Badge de Tipo en la cabecera del modal
+    const typeBadge = document.getElementById('view-mat-type-badge');
+    if (typeBadge) {
+        if (isMarkdown) {
+            typeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            typeBadge.textContent = '📝 MARKDOWN';
+        } else if (hasPdfFile || isPdf) {
+            typeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30';
+            typeBadge.textContent = '📄 PDF (PDFBox)';
+        } else {
+            typeBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30';
+            typeBadge.textContent = '🌐 WEB URL';
+        }
+    }
+
+    // Contenedores de contenido y toggle Renderizado / Raw
+    const mdToggle = document.getElementById('view-mat-md-toggle');
+    const renderedDiv = document.getElementById('view-mat-rendered');
+    const rawContentDiv = document.getElementById('view-mat-content');
+
+    rawContentDiv.textContent = activeMaterialText;
+
+    if (isMarkdown) {
+        if (mdToggle) {
+            mdToggle.classList.remove('hidden');
+            mdToggle.classList.add('flex');
+        }
+        if (renderedDiv) {
+            renderedDiv.innerHTML = renderMarkdown(activeMaterialText);
+        }
+        setMarkdownViewMode('preview');
+    } else {
+        if (mdToggle) {
+            mdToggle.classList.add('hidden');
+            mdToggle.classList.remove('flex');
+        }
+        if (renderedDiv) renderedDiv.classList.add('hidden');
+        if (rawContentDiv) rawContentDiv.classList.remove('hidden');
+    }
+
+    // Enlace a URL original si aplica
     const linkElem = document.getElementById('view-mat-link');
     if (mat.referenceUrlOrPage && (mat.referenceUrlOrPage.startsWith('http://') || mat.referenceUrlOrPage.startsWith('https://'))) {
         linkElem.href = mat.referenceUrlOrPage;
@@ -1385,8 +1540,9 @@ function openViewMaterialModal(id) {
         linkElem.classList.add('hidden');
     }
 
+    // Botón Visor PDF
     const pdfBtn = document.getElementById('view-mat-btn-pdf');
-    if (mat.filePath) {
+    if (hasPdfFile) {
         pdfBtn.onclick = () => {
             closeModal('modal-view-material');
             openPdfViewer(mat.id);
@@ -1396,6 +1552,19 @@ function openViewMaterialModal(id) {
         pdfBtn.classList.add('hidden');
     }
 
+    // Botón Descargar Archivo (.md, .pdf o texto)
+    const downloadBtn = document.getElementById('view-mat-btn-download');
+    if (downloadBtn) {
+        const fileUrl = `/api/materials/${mat.id}/file?download=true`;
+        downloadBtn.href = fileUrl;
+        const safeTitle = (mat.title || 'documento').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const ext = isMarkdown ? '.md' : (hasPdfFile || isPdf ? '.pdf' : '.txt');
+        downloadBtn.setAttribute('download', safeTitle.toLowerCase().endsWith(ext) ? safeTitle : safeTitle + ext);
+        downloadBtn.innerHTML = `📥 Descargar ${isMarkdown ? '.md' : (hasPdfFile || isPdf ? 'PDF' : 'Archivo')}`;
+        downloadBtn.classList.remove('hidden');
+    }
+
+    // Botón Practicar este Tema
     const practiceBtn = document.getElementById('view-mat-btn-practice');
     if (mat.topic && mat.topic.id) {
         practiceBtn.onclick = () => {
@@ -1442,19 +1611,223 @@ async function deleteMaterial(id) {
 function switchMaterialInputMode(mode) {
     const urlForm = document.getElementById('import-url-form');
     const pdfForm = document.getElementById('upload-pdf-form');
+    const mdForm = document.getElementById('import-md-form');
     const urlBtn = document.getElementById('tab-mat-url-btn');
     const pdfBtn = document.getElementById('tab-mat-pdf-btn');
+    const mdBtn = document.getElementById('tab-mat-md-btn');
+    const badgeHint = document.getElementById('mat-input-badge-hint');
+
+    const inactiveClass = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+    urlBtn.className = inactiveClass;
+    pdfBtn.className = inactiveClass;
+    if (mdBtn) mdBtn.className = inactiveClass;
+
+    urlForm.classList.add('hidden');
+    pdfForm.classList.add('hidden');
+    if (mdForm) mdForm.classList.add('hidden');
 
     if (mode === 'url') {
         urlForm.classList.remove('hidden');
-        pdfForm.classList.add('hidden');
         urlBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer';
-        pdfBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
-    } else {
-        urlForm.classList.add('hidden');
+        if (badgeHint) badgeHint.textContent = 'HTML Web / PDF Remoto';
+    } else if (mode === 'pdf') {
         pdfForm.classList.remove('hidden');
-        pdfBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white transition flex items-center gap-1.5 cursor-pointer';
-        urlBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+        pdfBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white transition flex items-center gap-1.5 cursor-pointer';
+        if (badgeHint) badgeHint.textContent = 'PDF Local / Apache PDFBox';
+    } else if (mode === 'markdown') {
+        if (mdForm) mdForm.classList.remove('hidden');
+        if (mdBtn) mdBtn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white transition flex items-center gap-1.5 cursor-pointer';
+        if (badgeHint) badgeHint.textContent = 'Markdown (.md) / Editor Enriquecido';
+    }
+}
+
+let currentMarkdownSubmode = 'file';
+
+function toggleMarkdownSubmode(submode) {
+    currentMarkdownSubmode = submode;
+    const fileContainer = document.getElementById('md-file-input-container');
+    const textContainer = document.getElementById('md-text-input-container');
+    const fileBtn = document.getElementById('md-mode-file-btn');
+    const textBtn = document.getElementById('md-mode-text-btn');
+
+    if (submode === 'file') {
+        if (fileContainer) fileContainer.classList.remove('hidden');
+        if (textContainer) textContainer.classList.add('hidden');
+        if (fileBtn) fileBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer';
+        if (textBtn) textBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer';
+    } else {
+        if (fileContainer) fileContainer.classList.add('hidden');
+        if (textContainer) textContainer.classList.remove('hidden');
+        if (textBtn) textBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer';
+        if (fileBtn) fileBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer';
+    }
+}
+
+function loadSampleMarkdown() {
+    toggleMarkdownSubmode('text');
+
+    const sampleMd = `# HL7 FHIR R4: Resumen de Arquitectura y Recursos
+
+## 1. Paradigmas de Intercambio
+FHIR define cuatro paradigmas principales para la interoperabilidad en salud:
+- **RESTful API**: Operaciones síncronas CRUD sobre URLs de recursos (\`GET\`, \`POST\`, \`PUT\`, \`DELETE\`).
+- **Mensajería (Messaging)**: Orientado a eventos, empaquetado en \`Bundle\` de tipo \`message\`.
+- **Documentos (Documents)**: Conjunto clínico coherente e inmutable con recurso raíz \`Composition\` y \`Bundle\` tipo \`document\`.
+- **Servicios / Operaciones**: Invocación de lógica RPC personalizada como \`$everything\`, \`$validate\`, \`$meta\`.
+
+## 2. Estructura Estándar de un Recurso
+Cada recurso FHIR comparte los siguientes componentes clave:
+1. **Identificador Lógico (\`id\`)**: Clave primaria en el servidor FHIR.
+2. **Metadatos (\`meta\`)**: \`versionId\`, marca temporal \`lastUpdated\` y perfiles \`profile\`.
+3. **Texto Narrativo (\`text\`)**: Fragmento XHTML legible por humanos para garantizar la seguridad clínica.
+4. **Extensiones**: Soporte estándar para campos personalizados sin romper interoperabilidad.
+
+\`\`\`json
+{
+  "resourceType": "Patient",
+  "id": "ejemplo-01",
+  "active": true,
+  "name": [{
+    "use": "official",
+    "family": "Fernández",
+    "given": ["Carlos"]
+  }],
+  "gender": "male",
+  "birthDate": "1980-06-15"
+}
+\`\`\`
+
+> **Buenas Prácticas**: Utiliza siempre los códigos oficiales de ValueSets terminológicos (LOINC, SNOMED CT, RxNorm) en los atributos \`code\`.
+`;
+
+    const titleInput = document.getElementById('import-md-title');
+    const textInput = document.getElementById('import-md-text');
+    if (titleInput) titleInput.value = 'HL7 FHIR R4 - Resumen de Arquitectura y Recursos';
+    if (textInput) textInput.value = sampleMd;
+
+    // Auto-select topic 'RESOURCES' (ID 3) si existe
+    const topicSelect = document.getElementById('import-md-topic-id');
+    if (topicSelect) {
+        for (let i = 0; i < topicSelect.options.length; i++) {
+            if (topicSelect.options[i].text.includes('Recursos') || topicSelect.options[i].value === '3') {
+                topicSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    showToast('Plantilla Markdown cargada en el editor.', 'info', 2000);
+}
+
+async function submitMarkdownMaterial(event) {
+    event.preventDefault();
+    const topicSelect = document.getElementById('import-md-topic-id');
+    const titleInput = document.getElementById('import-md-title');
+    const fileInput = document.getElementById('import-md-file');
+    const textInput = document.getElementById('import-md-text');
+    const statusSpan = document.getElementById('import-md-status');
+    const submitBtn = document.getElementById('btn-import-md-submit');
+
+    const topicId = topicSelect.value;
+    const title = titleInput.value.trim();
+
+    if (!topicId) {
+        showToast('Por favor selecciona un tema asociado.', 'warning');
+        return;
+    }
+
+    if (currentMarkdownSubmode === 'file') {
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showToast('Por favor selecciona un archivo Markdown (.md).', 'warning');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('topicId', topicId);
+        if (title) {
+            formData.append('title', title);
+        }
+
+        if (statusSpan) statusSpan.classList.remove('hidden');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50');
+        }
+
+        try {
+            const resp = await fetch('/api/materials/markdown/file', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (resp.ok) {
+                showToast('¡Archivo Markdown subido e indexado con éxito!', 'success');
+                fileInput.value = '';
+                titleInput.value = '';
+                await loadMaterials();
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                showToast('Error al subir el archivo Markdown: ' + (err.error || 'Verifica el archivo.'), 'error');
+            }
+        } catch (e) {
+            console.error('Error subiendo markdown file:', e);
+            showToast('Error de red al subir el archivo Markdown.', 'error');
+        } finally {
+            if (statusSpan) statusSpan.classList.add('hidden');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50');
+            }
+        }
+    } else {
+        const contentText = textInput.value.trim();
+        if (!contentText) {
+            showToast('Por favor escribe o pega contenido Markdown en el editor.', 'warning');
+            return;
+        }
+
+        if (!title) {
+            showToast('Por favor introduce un título para el documento Markdown.', 'warning');
+            return;
+        }
+
+        if (statusSpan) statusSpan.classList.remove('hidden');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50');
+        }
+
+        try {
+            const resp = await fetch('/api/materials/markdown/text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    topicId: topicId,
+                    title: title,
+                    content: contentText,
+                    contentText: contentText
+                })
+            });
+
+            if (resp.ok) {
+                showToast('¡Documento Markdown guardado e indexado con éxito!', 'success');
+                textInput.value = '';
+                titleInput.value = '';
+                await loadMaterials();
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                showToast('Error al guardar Markdown: ' + (err.error || 'Verifica los campos.'), 'error');
+            }
+        } catch (e) {
+            console.error('Error guardando markdown text:', e);
+            showToast('Error de red al guardar el documento Markdown.', 'error');
+        } finally {
+            if (statusSpan) statusSpan.classList.add('hidden');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50');
+            }
+        }
     }
 }
 
