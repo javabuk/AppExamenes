@@ -116,6 +116,17 @@ public class StudyMaterialController {
         }
     }
 
+    @GetMapping("/{id}/stats")
+    public ResponseEntity<?> getMaterialStats(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(studyMaterialService.getMaterialStats(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/{id}/generate-question")
     public ResponseEntity<?> generateQuestion(@PathVariable Long id) {
         try {

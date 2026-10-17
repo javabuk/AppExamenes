@@ -28,6 +28,10 @@ public class ExamAttempt {
     @Column(name = "score_percent")
     private Double scorePercent;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id")
+    private StudyMaterial material;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ExamAttemptAnswer> answers = new ArrayList<>();
 
@@ -80,4 +84,7 @@ public class ExamAttempt {
 
     public List<ExamAttemptAnswer> getAnswers() { return answers; }
     public void setAnswers(List<ExamAttemptAnswer> answers) { this.answers = answers; }
+
+    public StudyMaterial getMaterial() { return material; }
+    public void setMaterial(StudyMaterial material) { this.material = material; }
 }

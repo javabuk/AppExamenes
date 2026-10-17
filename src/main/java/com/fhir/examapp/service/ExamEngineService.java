@@ -50,10 +50,12 @@ public class ExamEngineService {
 
         List<Question> selectedQuestions;
         String materialTitle = null;
+        StudyMaterial targetMaterial = null;
 
         if (request.getMaterialId() != null) {
             StudyMaterial mat = studyMaterialRepository.findById(request.getMaterialId()).orElse(null);
             if (mat != null) {
+                targetMaterial = mat;
                 materialTitle = mat.getTitle();
                 selectedQuestions = selectQuestionsForMaterial(mat, mode, totalQuestionsNeeded);
             } else {
@@ -78,6 +80,9 @@ public class ExamEngineService {
 
         // Crear intento en BBDD
         ExamAttempt attempt = new ExamAttempt(mode);
+        if (targetMaterial != null) {
+            attempt.setMaterial(targetMaterial);
+        }
         attempt = attemptRepository.save(attempt);
 
         ExamSessionDTO session = new ExamSessionDTO();

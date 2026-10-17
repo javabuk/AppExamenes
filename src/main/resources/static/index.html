@@ -15,6 +15,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Marked.js for High-Fidelity Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Chart.js for High-Precision Analytics & Evolution Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body {
@@ -1335,6 +1337,9 @@
                     <button id="view-mat-btn-practice" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
                         🎯 Practicar este Documento
                     </button>
+                    <button id="view-mat-btn-stats" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 cursor-pointer">
+                        📊 Estadísticas & Evolución
+                    </button>
                     <button id="view-mat-btn-copy" onclick="copyMaterialText()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
                         📋 Copiar Texto
                     </button>
@@ -1361,6 +1366,9 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button id="pdf-viewer-btn-stats" onclick="openCurrentPdfStats()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 cursor-pointer">
+                        📊 <span>Estadísticas</span>
+                    </button>
                     <button id="pdf-viewer-btn-tab" onclick="openCurrentPdfInTab()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition flex items-center gap-1.5 cursor-pointer">
                         <span>Abrir en pestaña nueva</span> ↗
                     </button>
@@ -1460,6 +1468,177 @@
         </div>
     </div>
 
+    <!-- Modal: Estadísticas y Evolución de Prácticas del Documento -->
+    <div id="modal-material-stats" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-5 md:p-7 max-w-5xl w-full space-y-6 shadow-2xl my-auto max-h-[92vh] flex flex-col modal-box">
+            <!-- Header -->
+            <div class="flex items-start justify-between border-b border-slate-800 pb-4 shrink-0">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="w-11 h-11 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                        📈
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="flex items-center gap-2">
+                            <span id="mat-stats-id-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
+                            <span id="mat-stats-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-800 text-slate-300 border border-slate-700">DOCUMENTO</span>
+                            <h3 id="mat-stats-title" class="text-base md:text-lg font-bold text-white truncate max-w-md md:max-w-2xl">Estadísticas de Práctica</h3>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                            <span id="mat-stats-topic" class="text-sky-400 font-semibold truncate">Tema: General</span>
+                            <span>•</span>
+                            <span id="mat-stats-questions-count" class="font-mono text-emerald-400">0 preguntas vinculadas</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="mat-stats-btn-practice" class="hidden sm:flex px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shadow-blue-500/20 items-center gap-1.5 cursor-pointer">
+                        🎯 Nueva Práctica
+                    </button>
+                    <button onclick="closeModal('modal-material-stats')" class="text-slate-400 hover:text-white text-xl font-bold p-1 cursor-pointer">✕</button>
+                </div>
+            </div>
+
+            <!-- Scrollable Content Area -->
+            <div class="flex-1 overflow-y-auto space-y-6 pr-1 custom-scrollbar">
+                <!-- KPI Summary Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Sesiones Realizadas</span>
+                        <span id="mat-kpi-attempts" class="text-xl font-extrabold text-white mt-1 block font-mono">0</span>
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">intentos evaluados</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Puntuación Media</span>
+                        <span id="mat-kpi-avg" class="text-xl font-extrabold text-sky-400 mt-1 block font-mono">0.0%</span>
+                        <span id="mat-kpi-avg-badge" class="text-[10px] text-slate-500 mt-0.5 block">promedio global</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Mejor Resultado</span>
+                        <span id="mat-kpi-best" class="text-xl font-extrabold text-emerald-400 mt-1 block font-mono">0.0%</span>
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">puntuación récord</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Último Resultado</span>
+                        <span id="mat-kpi-latest" class="text-xl font-extrabold text-indigo-300 mt-1 block font-mono">0.0%</span>
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">sesión más reciente</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Tasa de Aprobados</span>
+                        <span id="mat-kpi-passrate" class="text-xl font-extrabold text-emerald-400 mt-1 block font-mono">0%</span>
+                        <span id="mat-kpi-passcount" class="text-[10px] text-slate-500 mt-0.5 block">0 de 0 (≥80%)</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80">
+                        <span class="text-[11px] font-medium text-slate-400 block">Tiempo Medio</span>
+                        <span id="mat-kpi-time" class="text-xl font-extrabold text-amber-400 mt-1 block font-mono">0m 0s</span>
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">duración por sesión</span>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Evolución Temporal -->
+                <div class="bg-slate-950/60 p-4 md:p-5 rounded-2xl border border-slate-800/80">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>📈 Evolución Histórica de Puntuaciones</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Meta HL7: ≥80%</span>
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Progreso y porcentaje de aciertos en cada práctica a lo largo del tiempo</p>
+                        </div>
+                        <div id="mat-chart-legend" class="flex items-center gap-3 text-[11px] text-slate-400">
+                            <span class="flex items-center gap-1.5"><span class="w-3 h-1 bg-sky-400 rounded"></span> Puntuación (%)</span>
+                            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-emerald-400 border-t border-dashed border-emerald-400"></span> Umbral Aprobado (80%)</span>
+                        </div>
+                    </div>
+
+                    <!-- Chart canvas container -->
+                    <div id="mat-chart-wrapper" class="relative w-full h-64 md:h-72">
+                        <canvas id="material-stats-chart" class="w-full h-full"></canvas>
+                        <!-- Fallback SVG Chart Container (if canvas or Chart.js fails/empty) -->
+                        <div id="mat-chart-svg-container" class="hidden w-full h-full"></div>
+                    </div>
+
+                    <!-- Empty state if no attempts -->
+                    <div id="mat-stats-empty-state" class="hidden flex flex-col items-center justify-center py-10 px-4 text-center">
+                        <div class="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-3xl mb-3">
+                            🎯
+                        </div>
+                        <h5 class="text-sm font-bold text-white mb-1">Aún no hay prácticas registradas para este documento</h5>
+                        <p class="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
+                            Completa tu primera sesión de entrenamiento con este apunte para comenzar a registrar tu curva de evolución, precisión y análisis de aciertos.
+                        </p>
+                        <button id="mat-stats-btn-empty-practice" class="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-md shadow-blue-500/20 flex items-center gap-2 cursor-pointer">
+                            🚀 Iniciar Primera Práctica Ahora
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Historial de Intentos de este Documento -->
+                <div id="mat-attempts-section" class="bg-slate-950/60 p-4 md:p-5 rounded-2xl border border-slate-800/80">
+                    <h4 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <span>📋 Historial Detallado de Prácticas</span>
+                        <span id="mat-attempts-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300">0 sesiones</span>
+                    </h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="text-slate-400 border-b border-slate-800 text-[11px]">
+                                    <th class="py-2.5 px-3"># Intento</th>
+                                    <th class="py-2.5 px-3">Fecha y Hora</th>
+                                    <th class="py-2.5 px-3">Modo</th>
+                                    <th class="py-2.5 px-3">Puntuación</th>
+                                    <th class="py-2.5 px-3">Aciertos / Total</th>
+                                    <th class="py-2.5 px-3">Duración</th>
+                                    <th class="py-2.5 px-3">Resultado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mat-attempts-table-body" class="divide-y divide-slate-800/60 text-slate-300 font-mono">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Desglose por Preguntas del Documento -->
+                <div id="mat-questions-section" class="bg-slate-950/60 p-4 md:p-5 rounded-2xl border border-slate-800/80">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>🎯 Dominio por Preguntas del Documento</span>
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Estado de retención y acierto de cada pregunta vinculada a este material</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="text-slate-400 border-b border-slate-800 text-[11px]">
+                                    <th class="py-2 px-3 w-16">ID</th>
+                                    <th class="py-2 px-3">Enunciado de la Pregunta</th>
+                                    <th class="py-2 px-3 text-center">Respondida</th>
+                                    <th class="py-2 px-3 text-center">Precisión</th>
+                                    <th class="py-2 px-3 text-right">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mat-questions-table-body" class="divide-y divide-slate-800/60 text-slate-300">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between pt-3 border-t border-slate-800 shrink-0">
+                <span class="text-[11px] text-slate-400">
+                    💡 Los resultados se actualizan automáticamente tras finalizar cada prueba o sesión de tutor.
+                </span>
+                <button onclick="closeModal('modal-material-stats')" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Confirmación Elegante (Reemplazo no bloqueante de window.confirm) -->
     <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
@@ -1490,6 +1669,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.10"></script>
+    <script src="/app.js?v=2.0.11"></script>
 </body>
 </html>

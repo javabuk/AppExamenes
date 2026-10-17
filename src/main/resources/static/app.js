@@ -1345,6 +1345,9 @@ function renderMaterials(list) {
             <button onclick="openPracticeMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
                 🎯 Practicar este Documento
             </button>
+            <button onclick="openMaterialStatsModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 font-bold transition shadow-sm shadow-sky-500/10 flex items-center gap-1.5 cursor-pointer">
+                📊 Estadísticas & Evolución
+            </button>
         `;
 
         card.innerHTML = `
@@ -1507,6 +1510,14 @@ function openCurrentPdfInTab() {
     }
 }
 
+function openCurrentPdfStats() {
+    if (currentPdfId) {
+        const id = currentPdfId;
+        closePdfViewer();
+        openMaterialStatsModal(id);
+    }
+}
+
 function closePdfViewer() {
     const frame = document.getElementById('pdf-viewer-frame');
     if (frame) frame.src = 'about:blank';
@@ -1611,6 +1622,16 @@ function openViewMaterialModal(id) {
             openPracticeMaterialModal(mat.id);
         };
         practiceBtn.classList.remove('hidden');
+    }
+
+    // Botón Estadísticas y Evolución
+    const statsBtn = document.getElementById('view-mat-btn-stats');
+    if (statsBtn) {
+        statsBtn.onclick = () => {
+            closeModal('modal-view-material');
+            openMaterialStatsModal(mat.id);
+        };
+        statsBtn.classList.remove('hidden');
     }
 
     openModal('modal-view-material');
@@ -2200,7 +2221,8 @@ async function openPracticeMaterialModal(id) {
         if (resp.ok) {
             const info = await resp.json();
             if (linkedEl) linkedEl.textContent = `${info.linkedQuestionsCount} pregunta${info.linkedQuestionsCount === 1 ? '' : 's'}`;
-            if (totalEl) totalEl.textContent = `${info.relevantQuestionsCount} preguntas en este tema`;
+            const tot = info.totalRelevantCount != null ? info.totalRelevantCount : (info.relevantQuestionsCount || 0);
+            if (totalEl) totalEl.textContent = `${tot} preguntas en este tema`;
         }
     } catch (e) {
         console.error('Error cargando info de práctica del documento:', e);
@@ -2303,5 +2325,397 @@ async function generateQuestionForActiveMaterial() {
         if (btn) btn.classList.remove('hidden');
         if (status) status.classList.add('hidden');
     }
+}
+
+// =================== ESTADÍSTICAS Y EVOLUCIÓN DE DOCUMENTOS ===================
+let materialStatsChartInstance = null;
+
+function formatDurationSeconds(totalSec) {
+    if (!totalSec || totalSec <= 0) return '0m 0s';
+    const m = Math.floor(totalSec / 60);
+    const s = Math.round(totalSec % 60);
+    if (m === 0) return `${s}s`;
+    return `${m}m ${s}s`;
+}
+
+async function openMaterialStatsModal(materialId) {
+    const mat = allMaterials ? allMaterials.find(m => m.id === materialId) : null;
+
+    // Resetear vistas del modal a estado de carga
+    document.getElementById('mat-stats-id-badge').textContent = `ID #${materialId}`;
+    document.getElementById('mat-stats-title').textContent = mat ? mat.title : 'Cargando estadísticas...';
+    document.getElementById('mat-stats-topic').textContent = mat && mat.topic ? `Tema: ${mat.topic.name}` : 'Tema: General';
+    document.getElementById('mat-stats-questions-count').textContent = 'Calculando preguntas...';
+
+    const typeBadge = document.getElementById('mat-stats-type-badge');
+    if (typeBadge) {
+        const srcType = mat ? mat.sourceType : 'DOCUMENTO';
+        typeBadge.textContent = srcType;
+    }
+
+    // Configurar botones de práctica
+    const practiceBtn = document.getElementById('mat-stats-btn-practice');
+    if (practiceBtn) {
+        practiceBtn.onclick = () => {
+            closeModal('modal-material-stats');
+            openPracticeMaterialModal(materialId);
+        };
+    }
+    const emptyPracticeBtn = document.getElementById('mat-stats-btn-empty-practice');
+    if (emptyPracticeBtn) {
+        emptyPracticeBtn.onclick = () => {
+            closeModal('modal-material-stats');
+            openPracticeMaterialModal(materialId);
+        };
+    }
+
+    // KPIs iniciales
+    document.getElementById('mat-kpi-attempts').textContent = '...';
+    document.getElementById('mat-kpi-avg').textContent = '...';
+    document.getElementById('mat-kpi-best').textContent = '...';
+    document.getElementById('mat-kpi-latest').textContent = '...';
+    document.getElementById('mat-kpi-passrate').textContent = '...';
+    document.getElementById('mat-kpi-time').textContent = '...';
+
+    openModal('modal-material-stats');
+
+    try {
+        const resp = await fetch(`/api/materials/${materialId}/stats`);
+        if (!resp.ok) {
+            showToast('No se pudieron obtener las estadísticas de este documento.', 'error');
+            return;
+        }
+
+        const stats = await resp.json();
+
+        // 1. Cabecera
+        document.getElementById('mat-stats-title').textContent = stats.materialTitle || 'Documento';
+        document.getElementById('mat-stats-topic').textContent = `Tema: ${stats.topicName || 'General'}`;
+        document.getElementById('mat-stats-questions-count').textContent = `${stats.linkedQuestionsCount} preguntas vinculadas`;
+
+        // 2. KPIs
+        document.getElementById('mat-kpi-attempts').textContent = stats.totalAttempts;
+
+        const avgEl = document.getElementById('mat-kpi-avg');
+        avgEl.textContent = `${stats.averageScore.toFixed(1)}%`;
+        if (stats.averageScore >= 80.0) {
+            avgEl.className = 'text-xl font-extrabold text-emerald-400 mt-1 block font-mono';
+        } else if (stats.averageScore >= 65.0) {
+            avgEl.className = 'text-xl font-extrabold text-amber-400 mt-1 block font-mono';
+        } else {
+            avgEl.className = 'text-xl font-extrabold text-rose-400 mt-1 block font-mono';
+        }
+
+        document.getElementById('mat-kpi-best').textContent = stats.bestScore != null ? `${stats.bestScore.toFixed(1)}%` : '-';
+        document.getElementById('mat-kpi-latest').textContent = stats.latestScore != null ? `${stats.latestScore.toFixed(1)}%` : '-';
+        document.getElementById('mat-kpi-passrate').textContent = `${stats.passRatePercent.toFixed(1)}%`;
+        document.getElementById('mat-kpi-passcount').textContent = `${stats.passedAttempts} de ${stats.totalAttempts} (≥80%)`;
+        document.getElementById('mat-kpi-time').textContent = formatDurationSeconds(stats.averageTimeSeconds);
+
+        // 3. Gráfico y Estado Vacío
+        const emptyState = document.getElementById('mat-stats-empty-state');
+        const chartWrapper = document.getElementById('mat-chart-wrapper');
+        const chartLegend = document.getElementById('mat-chart-legend');
+        const attemptsSection = document.getElementById('mat-attempts-section');
+
+        if (stats.totalAttempts === 0) {
+            if (emptyState) emptyState.classList.remove('hidden');
+            if (chartWrapper) chartWrapper.classList.add('hidden');
+            if (chartLegend) chartLegend.classList.add('hidden');
+            if (attemptsSection) attemptsSection.classList.add('hidden');
+        } else {
+            if (emptyState) emptyState.classList.add('hidden');
+            if (chartWrapper) chartWrapper.classList.remove('hidden');
+            if (chartLegend) chartLegend.classList.remove('hidden');
+            if (attemptsSection) attemptsSection.classList.remove('hidden');
+
+            renderMaterialEvolutionChart(stats.evolution);
+            renderMaterialAttemptsTable(stats.evolution);
+        }
+
+        // 4. Desglose de preguntas del documento
+        renderMaterialQuestionsTable(stats.questionPerformance, materialId);
+
+    } catch (e) {
+        console.error('Error cargando estadísticas del material:', e);
+        showToast('Error de conexión al cargar estadísticas.', 'error');
+    }
+}
+
+function renderMaterialAttemptsTable(evolution) {
+    const tbody = document.getElementById('mat-attempts-table-body');
+    const badge = document.getElementById('mat-attempts-badge');
+    if (!tbody) return;
+
+    if (badge) badge.textContent = `${evolution.length} sesió${evolution.length === 1 ? 'n' : 'nes'}`;
+    tbody.innerHTML = '';
+
+    // Mostrar intentos en orden inverso (más recientes primero en la tabla)
+    const reversed = [...evolution].reverse();
+
+    reversed.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition';
+        const isPass = p.passed;
+        const passBadge = isPass
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">APROBADO</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">SUSPENSO</span>';
+
+        tr.innerHTML = `
+            <td class="py-2.5 px-3 font-bold text-sky-400">#${p.attemptNumber}</td>
+            <td class="py-2.5 px-3 text-slate-300 text-[11px] font-sans">${p.formattedDate || p.startedAt}</td>
+            <td class="py-2.5 px-3 text-slate-400 font-sans text-[11px]"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${p.mode}</span></td>
+            <td class="py-2.5 px-3 font-bold ${isPass ? 'text-emerald-400' : 'text-rose-400'}">${p.scorePercent.toFixed(1)}%</td>
+            <td class="py-2.5 px-3 text-slate-300">${p.correctCount} / ${p.totalCount}</td>
+            <td class="py-2.5 px-3 text-slate-400 font-sans text-[11px]">${formatDurationSeconds(p.durationSeconds)}</td>
+            <td class="py-2.5 px-3">${passBadge}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderMaterialQuestionsTable(questions, materialId) {
+    const tbody = document.getElementById('mat-questions-table-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (!questions || questions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="py-6 text-center text-slate-500 text-xs">
+                    No hay preguntas explícitamente vinculadas a este documento todavía.
+                    <button onclick="closeModal('modal-material-stats'); openPracticeMaterialModal(${materialId})" class="text-blue-400 hover:text-blue-300 font-semibold underline ml-1 cursor-pointer">
+                        Generar preguntas con IA →
+                    </button>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    questions.forEach(q => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition';
+
+        let statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">SIN INTENTOS</span>';
+        if (q.status === 'DOMINADA') {
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">🌟 DOMINADA (≥80%)</span>';
+        } else if (q.status === 'EN_PROGRESO') {
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">⚖️ EN PROGRESO</span>';
+        } else if (q.status === 'A_REFORZAR') {
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">⚠️ A REFORZAR</span>';
+        }
+
+        const stemText = q.stem ? (q.stem.length > 90 ? q.stem.substring(0, 90) + '...' : q.stem) : 'Pregunta #' + q.questionId;
+
+        tr.innerHTML = `
+            <td class="py-2.5 px-3 font-mono text-[11px] font-bold text-indigo-400">#${q.questionId}</td>
+            <td class="py-2.5 px-3 font-sans text-xs text-slate-200">${stemText}</td>
+            <td class="py-2.5 px-3 text-center font-mono text-xs text-slate-300">${q.timesAnswered > 0 ? `${q.timesAnswered} veces (${q.timesCorrect} aciertos)` : '-'}</td>
+            <td class="py-2.5 px-3 text-center font-mono font-bold ${q.timesAnswered > 0 ? (q.accuracyPercent >= 80 ? 'text-emerald-400' : (q.accuracyPercent >= 50 ? 'text-amber-400' : 'text-rose-400')) : 'text-slate-500'}">
+                ${q.timesAnswered > 0 ? q.accuracyPercent.toFixed(1) + '%' : '-'}
+            </td>
+            <td class="py-2.5 px-3 text-right">${statusBadge}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderMaterialEvolutionChart(evolution) {
+    const canvas = document.getElementById('material-stats-chart');
+    const svgContainer = document.getElementById('mat-chart-svg-container');
+    if (!canvas) return;
+
+    if (materialStatsChartInstance) {
+        materialStatsChartInstance.destroy();
+        materialStatsChartInstance = null;
+    }
+
+    if (!evolution || evolution.length === 0) return;
+
+    // Si Chart.js está disponible
+    if (typeof Chart !== 'undefined') {
+        canvas.classList.remove('hidden');
+        if (svgContainer) svgContainer.classList.add('hidden');
+
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+        gradient.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+        gradient.addColorStop(1, 'rgba(56, 189, 248, 0.02)');
+
+        const labels = evolution.map(p => `Intento #${p.attemptNumber}`);
+        const scores = evolution.map(p => p.scorePercent);
+        const passThreshold = evolution.map(() => 80.0);
+
+        materialStatsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Puntuación (%)',
+                        data: scores,
+                        borderColor: '#38bdf8',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        pointBackgroundColor: evolution.map(p => p.passed ? '#10b981' : '#f43f5e'),
+                        pointBorderColor: '#0f172a',
+                        pointBorderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        tension: 0.25,
+                        fill: true
+                    },
+                    {
+                        label: 'Umbral Aprobado (80%)',
+                        data: passThreshold,
+                        borderColor: 'rgba(16, 185, 129, 0.75)',
+                        borderWidth: 2,
+                        borderDash: [6, 6],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 500,
+                    easing: 'easeOutQuart'
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        grid: {
+                            color: 'rgba(51, 65, 85, 0.4)'
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { family: 'JetBrains Mono', size: 11 },
+                            stepSize: 20,
+                            callback: v => v + '%'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(51, 65, 85, 0.2)'
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { family: 'Plus Jakarta Sans', size: 11 }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#cbd5e1',
+                        borderColor: 'rgba(56, 189, 248, 0.4)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 12,
+                        displayColors: false,
+                        callbacks: {
+                            title: (items) => {
+                                const idx = items[0].dataIndex;
+                                const p = evolution[idx];
+                                return `Intento #${p.attemptNumber} • ${p.formattedDate}`;
+                            },
+                            label: (item) => {
+                                const p = evolution[item.dataIndex];
+                                return [
+                                    `🎯 Puntuación: ${p.scorePercent}% (${p.passed ? 'APROBADO' : 'SUSPENSO'})`,
+                                    `📝 Aciertos: ${p.correctCount} de ${p.totalCount}`,
+                                    `⏱️ Duración: ${formatDurationSeconds(p.durationSeconds)}`,
+                                    `📋 Modo: ${p.mode}`
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        renderFallbackSvgChart(evolution);
+    }
+}
+
+function renderFallbackSvgChart(evolution) {
+    const canvas = document.getElementById('material-stats-chart');
+    const svgContainer = document.getElementById('mat-chart-svg-container');
+    if (!svgContainer) return;
+
+    if (canvas) canvas.classList.add('hidden');
+    svgContainer.classList.remove('hidden');
+
+    const width = 800;
+    const height = 260;
+    const padding = { top: 20, right: 30, bottom: 40, left: 50 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+
+    const n = evolution.length;
+    const stepX = n > 1 ? chartW / (n - 1) : chartW / 2;
+
+    const points = evolution.map((p, i) => {
+        const x = n > 1 ? padding.left + (i * stepX) : padding.left + (chartW / 2);
+        const y = padding.top + chartH - (p.scorePercent / 100 * chartH);
+        return { x, y, p, i };
+    });
+
+    const passY = padding.top + chartH - (80 / 100 * chartH);
+
+    let polylinePoints = points.map(pt => `${pt.x},${pt.y}`).join(' ');
+    let areaPoints = `${points[0].x},${padding.top + chartH} ` + polylinePoints + ` ${points[points.length - 1].x},${padding.top + chartH}`;
+
+    let svgHtml = `
+        <svg viewBox="0 0 ${width} ${height}" class="w-full h-full overflow-visible font-mono text-xs">
+            <defs>
+                <linearGradient id="svgGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+                </linearGradient>
+            </defs>
+            <!-- Eje y cuadrícula -->
+            <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" stroke="#334155" stroke-dasharray="4" opacity="0.4"/>
+            <line x1="${padding.left}" y1="${padding.top + chartH * 0.5}" x2="${width - padding.right}" y2="${padding.top + chartH * 0.5}" stroke="#334155" stroke-dasharray="4" opacity="0.4"/>
+            <line x1="${padding.left}" y1="${padding.top + chartH}" x2="${width - padding.right}" y2="${padding.top + chartH}" stroke="#334155" opacity="0.6"/>
+
+            <!-- Línea Meta 80% Aprobado -->
+            <line x1="${padding.left}" y1="${passY}" x2="${width - padding.right}" y2="${passY}" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.8"/>
+            <text x="${width - padding.right - 5}" y="${passY - 6}" fill="#10b981" font-size="10" text-anchor="end" font-weight="bold">Meta 80%</text>
+
+            <!-- Ticks Eje Y -->
+            <text x="${padding.left - 8}" y="${padding.top + 4}" fill="#94a3b8" font-size="10" text-anchor="end">100%</text>
+            <text x="${padding.left - 8}" y="${padding.top + chartH * 0.5 + 4}" fill="#94a3b8" font-size="10" text-anchor="end">50%</text>
+            <text x="${padding.left - 8}" y="${padding.top + chartH + 4}" fill="#94a3b8" font-size="10" text-anchor="end">0%</text>
+
+            <!-- Área rellena con gradiente -->
+            <polygon points="${areaPoints}" fill="url(#svgGradient)"/>
+
+            <!-- Línea de evolución -->
+            <polyline fill="none" stroke="#38bdf8" stroke-width="3" points="${polylinePoints}" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <!-- Puntos de datos interactivos -->
+            ${points.map(pt => `
+                <g class="cursor-pointer group">
+                    <circle cx="${pt.x}" cy="${pt.y}" r="6" fill="${pt.p.passed ? '#10b981' : '#f43f5e'}" stroke="#0f172a" stroke-width="2"/>
+                    <text x="${pt.x}" y="${padding.top + chartH + 20}" fill="#94a3b8" font-size="10" text-anchor="middle">#${pt.p.attemptNumber}</text>
+                    <title>Intento #${pt.p.attemptNumber}: ${pt.p.scorePercent}% (${pt.p.passed ? 'Aprobado' : 'Suspenso'}) - ${pt.p.formattedDate}</title>
+                </g>
+            `).join('')}
+        </svg>
+    `;
+
+    svgContainer.innerHTML = svgHtml;
 }
 

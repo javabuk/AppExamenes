@@ -27,4 +27,7 @@ public interface ExamAttemptAnswerRepository extends JpaRepository<ExamAttemptAn
 
     @Query("SELECT COUNT(a) FROM ExamAttemptAnswer a WHERE a.flagged = true")
     long countFlaggedTotal();
+
+    @Query("SELECT a FROM ExamAttemptAnswer a WHERE a.question.material.id = :materialId")
+    List<ExamAttemptAnswer> findAnswersByMaterialId(@Param("materialId") Long materialId);
 }

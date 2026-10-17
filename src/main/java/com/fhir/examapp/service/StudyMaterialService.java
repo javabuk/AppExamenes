@@ -1,9 +1,16 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.ExamAttempt;
+import com.fhir.examapp.domain.ExamAttemptAnswer;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
 import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.domain.SyllabusTopic;
+import com.fhir.examapp.dto.MaterialEvolutionPointDTO;
+import com.fhir.examapp.dto.MaterialQuestionPerformanceDTO;
+import com.fhir.examapp.dto.MaterialStatsDTO;
+import com.fhir.examapp.repository.ExamAttemptAnswerRepository;
+import com.fhir.examapp.repository.ExamAttemptRepository;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
@@ -16,9 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -29,17 +40,23 @@ public class StudyMaterialService {
     private final QuestionRepository questionRepository;
     private final QuestionOptionRepository questionOptionRepository;
     private final SpacedRepetitionService srsService;
+    private final ExamAttemptRepository attemptRepository;
+    private final ExamAttemptAnswerRepository attemptAnswerRepository;
 
     public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
                                 SyllabusTopicRepository syllabusTopicRepository,
                                 QuestionRepository questionRepository,
                                 QuestionOptionRepository questionOptionRepository,
-                                SpacedRepetitionService srsService) {
+                                SpacedRepetitionService srsService,
+                                ExamAttemptRepository attemptRepository,
+                                ExamAttemptAnswerRepository attemptAnswerRepository) {
         this.studyMaterialRepository = studyMaterialRepository;
         this.syllabusTopicRepository = syllabusTopicRepository;
         this.questionRepository = questionRepository;
         this.questionOptionRepository = questionOptionRepository;
         this.srsService = srsService;
+        this.attemptRepository = attemptRepository;
+        this.attemptAnswerRepository = attemptAnswerRepository;
     }
 
     /**
@@ -433,5 +450,148 @@ public class StudyMaterialService {
 
         srsService.ensureSrsState(q);
         return q;
+    }
+
+    /**
+     * Obtiene las estadísticas consolidadas, el histórico de evolución para gráficos
+     * y el desglose de rendimiento por pregunta para un documento específico.
+     */
+    @Transactional(readOnly = true)
+    public MaterialStatsDTO getMaterialStats(Long materialId) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material de estudio no encontrado: " + materialId));
+
+        MaterialStatsDTO dto = new MaterialStatsDTO();
+        dto.setMaterialId(material.getId());
+        dto.setMaterialTitle(material.getTitle());
+        dto.setSourceType(material.getSourceType());
+        dto.setTopicId(material.getTopic() != null ? material.getTopic().getId() : null);
+        dto.setTopicName(material.getTopic() != null ? material.getTopic().getName() : "General");
+
+        long linkedCount = questionRepository.countByMaterialIdAndVerifiedTrue(materialId);
+        dto.setLinkedQuestionsCount(linkedCount);
+
+        // 1. Obtener intentos completados asociados a este material (ordenados cronológicamente)
+        List<ExamAttempt> attempts = attemptRepository.findFinishedAttemptsForMaterial(materialId);
+        dto.setTotalAttempts(attempts.size());
+
+        if (!attempts.isEmpty()) {
+            int passedCount = 0;
+            double sumScore = 0.0;
+            double maxScore = 0.0;
+            int totalQuestionsCount = 0;
+            int totalCorrectCount = 0;
+            long totalDurationSec = 0;
+
+            DateTimeFormatter displayFormatter = DateTimeFormatter.ofPattern("d MMM HH:mm", new Locale("es", "ES"));
+
+            int attemptIndex = 1;
+            for (ExamAttempt a : attempts) {
+                double score = a.getScorePercent() != null ? a.getScorePercent() : 0.0;
+                sumScore += score;
+                if (score > maxScore) maxScore = score;
+                boolean passed = score >= 80.0;
+                if (passed) passedCount++;
+
+                int correctInAttempt = 0;
+                int totalInAttempt = 0;
+                int durationInAttempt = 0;
+
+                if (a.getAnswers() != null && !a.getAnswers().isEmpty()) {
+                    totalInAttempt = a.getAnswers().size();
+                    for (ExamAttemptAnswer ans : a.getAnswers()) {
+                        if (Boolean.TRUE.equals(ans.getCorrect())) {
+                            correctInAttempt++;
+                        }
+                        if (ans.getTimeSpentSeconds() != null) {
+                            durationInAttempt += ans.getTimeSpentSeconds();
+                        }
+                    }
+                }
+
+                if (durationInAttempt == 0 && a.getStartedAt() != null && a.getFinishedAt() != null) {
+                    try {
+                        durationInAttempt = (int) Math.max(1, java.time.Duration.between(a.getStartedAt(), a.getFinishedAt()).getSeconds());
+                    } catch (Exception ignored) {}
+                }
+
+                totalQuestionsCount += totalInAttempt;
+                totalCorrectCount += correctInAttempt;
+                totalDurationSec += durationInAttempt;
+
+                String dateLabel = "#" + attemptIndex;
+                if (a.getStartedAt() != null) {
+                    try {
+                        dateLabel = a.getStartedAt().format(displayFormatter);
+                    } catch (Exception ignored) {}
+                }
+
+                MaterialEvolutionPointDTO point = new MaterialEvolutionPointDTO(
+                        a.getId(),
+                        attemptIndex,
+                        a.getStartedAt() != null ? a.getStartedAt().toString() : "",
+                        a.getFinishedAt() != null ? a.getFinishedAt().toString() : "",
+                        dateLabel,
+                        a.getMode(),
+                        Math.round(score * 10.0) / 10.0,
+                        correctInAttempt,
+                        totalInAttempt,
+                        durationInAttempt,
+                        passed
+                );
+                dto.getEvolution().add(point);
+                attemptIndex++;
+            }
+
+            dto.setPassedAttempts(passedCount);
+            dto.setFailedAttempts(attempts.size() - passedCount);
+            dto.setPassRatePercent(Math.round(((double) passedCount / attempts.size()) * 1000.0) / 10.0);
+            dto.setAverageScore(Math.round((sumScore / attempts.size()) * 10.0) / 10.0);
+            dto.setBestScore(Math.round(maxScore * 10.0) / 10.0);
+            dto.setLatestScore(dto.getEvolution().get(dto.getEvolution().size() - 1).getScorePercent());
+            dto.setTotalQuestionsAnswered(totalQuestionsCount);
+            dto.setTotalCorrectAnswers(totalCorrectCount);
+            dto.setOverallAccuracyPercent(totalQuestionsCount > 0
+                    ? Math.round(((double) totalCorrectCount / totalQuestionsCount) * 1000.0) / 10.0
+                    : 0.0);
+            dto.setAverageTimeSeconds((int) (totalDurationSec / attempts.size()));
+        }
+
+        // 2. Desglose de preguntas del documento y su dominio
+        List<Question> linkedQuestions = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
+        List<ExamAttemptAnswer> materialAnswers = attemptAnswerRepository.findAnswersByMaterialId(materialId);
+
+        Map<Long, List<ExamAttemptAnswer>> answersByQuestionId = materialAnswers.stream()
+                .filter(ans -> ans.getQuestion() != null && ans.getQuestion().getId() != null)
+                .collect(Collectors.groupingBy(ans -> ans.getQuestion().getId()));
+
+        for (Question q : linkedQuestions) {
+            List<ExamAttemptAnswer> qAnswers = answersByQuestionId.getOrDefault(q.getId(), Collections.emptyList());
+            int answeredCount = qAnswers.size();
+            int correctCount = (int) qAnswers.stream().filter(a -> Boolean.TRUE.equals(a.getCorrect())).count();
+            double acc = answeredCount > 0 ? Math.round(((double) correctCount / answeredCount) * 1000.0) / 10.0 : 0.0;
+
+            String status = "SIN_INTENTOS";
+            if (answeredCount > 0) {
+                if (acc >= 80.0) {
+                    status = "DOMINADA";
+                } else if (acc >= 50.0) {
+                    status = "EN_PROGRESO";
+                } else {
+                    status = "A_REFORZAR";
+                }
+            }
+
+            dto.getQuestionPerformance().add(new MaterialQuestionPerformanceDTO(
+                    q.getId(),
+                    q.getStem(),
+                    answeredCount,
+                    correctCount,
+                    acc,
+                    status
+            ));
+        }
+
+        return dto;
     }
 }
