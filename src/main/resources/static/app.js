@@ -984,27 +984,76 @@ function renderMaterials(list) {
         const topicName = m.topic ? m.topic.name : 'General';
         const topicId = m.topic ? m.topic.id : null;
 
+        // Determinar si es URL externa o PDF con archivo físico
+        const isUrl = m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://'));
+        const hasPdfFile = Boolean(m.filePath);
+        const isPdf = hasPdfFile || m.sourceType === 'COURSE_PDF' || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().includes('.pdf'));
+
         // Extract a clean, single-paragraph preview excerpt (max 240 chars)
         const cleanContent = (m.contentText || '').trim().replace(/\s+/g, ' ');
         const excerpt = cleanContent.length > 240 ? cleanContent.substring(0, 240) + '...' : cleanContent;
+
+        // Construir botones según el tipo de documento
+        let actionButtonsHtml = '';
+
+        if (hasPdfFile) {
+            actionButtonsHtml += `
+                <button onclick="openPdfViewer(${m.id})" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
+                    📄 Ver PDF Original
+                </button>
+            `;
+        } else if (isPdf && isUrl) {
+            actionButtonsHtml += `
+                <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
+                    📄 Ver PDF Remoto ↗
+                </button>
+            `;
+        }
+
+        if (isUrl) {
+            actionButtonsHtml += `
+                <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
+                    🌐 Abrir Web Original ↗
+                </button>
+            `;
+        }
+
+        actionButtonsHtml += `
+            <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer">
+                📖 Ver Texto Extraído
+            </button>
+        `;
+
+        if (topicId) {
+            actionButtonsHtml += `
+                <button onclick="startExamWithTopic(${topicId})" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer">
+                    🎯 Practicar Preguntas
+                </button>
+            `;
+        }
 
         card.innerHTML = `
             <div class="flex items-center justify-between text-xs">
                 <span class="font-bold text-white text-sm">${m.title}</span>
                 <div class="flex items-center gap-2">
-                    <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono text-[10px]">${m.sourceType}</span>
+                    <span class="px-2 py-0.5 rounded ${hasPdfFile ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : isUrl ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-slate-700 text-slate-300'} font-mono text-[10px] font-bold">
+                        ${hasPdfFile ? 'PDF (PDFBox)' : m.sourceType}
+                    </span>
                     <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">${wordsCount} palabras</span>
                 </div>
             </div>
             
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="text-blue-400 font-semibold">📁 Tema: ${topicName}</span>
-                ${m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://')) ? `
+                ${isUrl ? `
                     <span class="text-slate-600">•</span>
                     <a href="${m.referenceUrlOrPage}" target="_blank" class="text-blue-400 hover:underline flex items-center gap-1 font-mono text-[11px]">
                         🔗 ${m.referenceUrlOrPage.length > 55 ? m.referenceUrlOrPage.substring(0, 55) + '...' : m.referenceUrlOrPage} ↗
                     </a>
-                ` : ''}
+                ` : (m.filePath ? `
+                    <span class="text-slate-600">•</span>
+                    <span class="text-slate-400 font-mono text-[11px]">📁 Archivo local guardado</span>
+                ` : '')}
             </div>
 
             <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed overflow-hidden">
@@ -1013,13 +1062,7 @@ function renderMaterials(list) {
 
             <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800 text-xs">
                 <div class="flex flex-wrap items-center gap-2">
-                    <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer">
-                        📖 Leer Documento Completo
-                    </button>
-                    ${topicId ? `
-                    <button onclick="startExamWithTopic(${topicId})" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer">
-                        🎯 Practicar Preguntas del Tema
-                    </button>` : ''}
+                    ${actionButtonsHtml}
                 </div>
                 <button onclick="deleteMaterial(${m.id})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-700 text-xs font-semibold transition cursor-pointer">
                     🗑️ Eliminar
@@ -1031,6 +1074,41 @@ function renderMaterials(list) {
 }
 
 let activeMaterialText = '';
+let currentPdfId = null;
+
+function openPdfViewer(id) {
+    const mat = allMaterials.find(m => m.id === id);
+    if (!mat) return;
+
+    currentPdfId = id;
+    const fileUrl = `/api/materials/${id}/file`;
+
+    document.getElementById('pdf-viewer-title').textContent = mat.title;
+    document.getElementById('pdf-viewer-topic').textContent = mat.topic ? mat.topic.name : 'General';
+
+    const downloadBtn = document.getElementById('pdf-viewer-btn-download');
+    downloadBtn.href = fileUrl;
+    const safeTitle = (mat.title || 'documento').replace(/[^a-zA-Z0-9._-]/g, '_');
+    downloadBtn.setAttribute('download', safeTitle.toLowerCase().endsWith('.pdf') ? safeTitle : safeTitle + '.pdf');
+
+    const frame = document.getElementById('pdf-viewer-frame');
+    frame.src = fileUrl;
+
+    document.getElementById('modal-pdf-viewer').classList.remove('hidden');
+}
+
+function openCurrentPdfInTab() {
+    if (currentPdfId) {
+        window.open(`/api/materials/${currentPdfId}/file`, '_blank');
+    }
+}
+
+function closePdfViewer() {
+    const frame = document.getElementById('pdf-viewer-frame');
+    if (frame) frame.src = 'about:blank';
+    closeModal('modal-pdf-viewer');
+    currentPdfId = null;
+}
 
 function openViewMaterialModal(id) {
     const mat = allMaterials.find(m => m.id === id);
@@ -1049,6 +1127,17 @@ function openViewMaterialModal(id) {
         linkElem.classList.remove('hidden');
     } else {
         linkElem.classList.add('hidden');
+    }
+
+    const pdfBtn = document.getElementById('view-mat-btn-pdf');
+    if (mat.filePath) {
+        pdfBtn.onclick = () => {
+            closeModal('modal-view-material');
+            openPdfViewer(mat.id);
+        };
+        pdfBtn.classList.remove('hidden');
+    } else {
+        pdfBtn.classList.add('hidden');
     }
 
     const practiceBtn = document.getElementById('view-mat-btn-practice');

@@ -26,6 +26,9 @@ public class StudyMaterial {
     @Column(name = "reference_url_or_page")
     private String referenceUrlOrPage;
 
+    @Column(name = "file_path")
+    private String filePath;
+
     public StudyMaterial() {}
 
     public StudyMaterial(SyllabusTopic topic, String sourceType, String title, String contentText, String referenceUrlOrPage) {
@@ -53,4 +56,7 @@ public class StudyMaterial {
 
     public String getReferenceUrlOrPage() { return referenceUrlOrPage; }
     public void setReferenceUrlOrPage(String referenceUrlOrPage) { this.referenceUrlOrPage = referenceUrlOrPage; }
+
+    public String getFilePath() { return filePath; }
+    public void setFilePath(String filePath) { this.filePath = filePath; }
 }

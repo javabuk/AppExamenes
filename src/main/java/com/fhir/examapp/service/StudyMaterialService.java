@@ -47,6 +47,16 @@ public class StudyMaterialService {
             extractedText = "(El PDF no contenía texto legible o es un documento escaneado/imagen)";
         }
 
+        // Guardar archivo binario físico en ./data/materials/ para poder visualizar el original
+        java.io.File storageDir = new java.io.File("./data/materials");
+        if (!storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+        String safeOriginal = file.getOriginalFilename() != null ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_") : "document.pdf";
+        String storedFilename = System.currentTimeMillis() + "_" + safeOriginal;
+        java.io.File targetFile = new java.io.File(storageDir, storedFilename);
+        java.nio.file.Files.write(targetFile.toPath(), file.getBytes());
+
         StudyMaterial material = new StudyMaterial(
                 topic,
                 "COURSE_PDF",
@@ -54,6 +64,7 @@ public class StudyMaterialService {
                 extractedText,
                 file.getOriginalFilename() + "#total"
         );
+        material.setFilePath(targetFile.getPath());
 
         return studyMaterialRepository.save(material);
     }
@@ -79,6 +90,7 @@ public class StudyMaterialService {
         }
 
         // 1. Si la URL apunta directamente a un archivo PDF remoto
+        String downloadedPdfPath = null;
         if (urlString.toLowerCase().endsWith(".pdf")) {
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
@@ -101,6 +113,17 @@ public class StudyMaterialService {
                         String path = java.net.URI.create(urlString).getPath();
                         title = path.substring(path.lastIndexOf('/') + 1);
                     }
+                    // Guardar copia física del PDF descargado
+                    java.io.File storageDir = new java.io.File("./data/materials");
+                    if (!storageDir.exists()) {
+                        storageDir.mkdirs();
+                    }
+                    String safeOriginal = title != null ? title.replaceAll("[^a-zA-Z0-9._-]", "_") : "remote.pdf";
+                    if (!safeOriginal.toLowerCase().endsWith(".pdf")) safeOriginal += ".pdf";
+                    String storedFilename = System.currentTimeMillis() + "_" + safeOriginal;
+                    java.io.File targetFile = new java.io.File(storageDir, storedFilename);
+                    java.nio.file.Files.write(targetFile.toPath(), resp.body());
+                    downloadedPdfPath = targetFile.getPath();
                 }
             } catch (Exception ignored) {
                 // Si falla como PDF directo, continuar con descarga web estándar
@@ -152,6 +175,9 @@ public class StudyMaterialService {
                 contentText,
                 urlString
         );
+        if (downloadedPdfPath != null) {
+            material.setFilePath(downloadedPdfPath);
+        }
 
         return studyMaterialRepository.save(material);
     }
@@ -194,6 +220,23 @@ public class StudyMaterialService {
     }
 
     public void deleteMaterial(Long id) {
-        studyMaterialRepository.deleteById(id);
+        studyMaterialRepository.findById(id).ifPresent(m -> {
+            if (m.getFilePath() != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(m.getFilePath()));
+                } catch (Exception ignored) {}
+            }
+            studyMaterialRepository.delete(m);
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public java.io.File getMaterialPhysicalFile(Long id) {
+        StudyMaterial m = studyMaterialRepository.findById(id).orElse(null);
+        if (m != null && m.getFilePath() != null) {
+            java.io.File f = new java.io.File(m.getFilePath());
+            if (f.exists()) return f;
+        }
+        return null;
     }
 }

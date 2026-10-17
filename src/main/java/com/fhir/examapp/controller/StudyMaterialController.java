@@ -69,6 +69,18 @@ public class StudyMaterialController {
         return m != null ? ResponseEntity.ok(m) : ResponseEntity.notFound().build();
     }
 
+    @GetMapping("/{id}/file")
+    public ResponseEntity<org.springframework.core.io.Resource> getMaterialFile(@PathVariable Long id) {
+        java.io.File file = studyMaterialService.getMaterialPhysicalFile(id);
+        if (file == null || !file.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/pdf")
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
+                .body(new org.springframework.core.io.FileSystemResource(file));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, Object>> deleteMaterial(@PathVariable Long id) {
         studyMaterialService.deleteMaterial(id);
