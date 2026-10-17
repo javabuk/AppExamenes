@@ -39,10 +39,19 @@
             background-clip: content-box;
         }
 
-        /* Impeccable Tab Button Transition */
+        /* ================= IMPECCABLE MOTION SYSTEM ================= */
+        /* Easing curve: Natural deceleration (cubic-bezier(0.16, 1, 0.3, 1)) */
+
+        /* 1. Tab Button Transition */
         .tab-btn {
             position: relative;
-            transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: background-color 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+                        color 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+                        border-color 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .tab-btn:active {
+            transform: scale(0.985);
         }
         .tab-btn.active {
             background-color: rgba(37, 99, 235, 0.18);
@@ -51,22 +60,180 @@
             font-weight: 600;
         }
 
-        /* Modal Dialog Animation */
+        /* 2. View Entrance Transition (Continuity 180-200ms) */
+        @keyframes viewEnter {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .view-enter {
+            animation: viewEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+        }
+
+        /* 3. Question Runner Animations (180ms) */
+        @keyframes questionEnter {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .question-enter {
+            animation: questionEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+        }
+
+        .option-btn {
+            transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+                        background-color 0.14s ease,
+                        border-color 0.14s ease,
+                        box-shadow 0.14s ease;
+            will-change: transform;
+        }
+        .option-btn:active {
+            transform: scale(0.985);
+        }
+
+        /* 4. Tutor Mode Feedback Reveal (200ms) */
+        @keyframes feedbackReveal {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .feedback-reveal {
+            animation: feedbackReveal 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+        }
+
+        /* 5. Flashcards 3D Perspective & Motion */
+        .fc-perspective {
+            perspective: 1200px;
+        }
+        @keyframes cardFlipReveal {
+            0% {
+                opacity: 0;
+                transform: rotateX(-12deg) translateY(8px);
+            }
+            100% {
+                opacity: 1;
+                transform: rotateX(0deg) translateY(0);
+            }
+        }
+        .card-flip-reveal {
+            animation: cardFlipReveal 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            transform-origin: top center;
+            will-change: transform, opacity;
+        }
+        @keyframes cardNextOut {
+            from {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-16px) scale(0.98);
+            }
+        }
+        @keyframes cardNextIn {
+            from {
+                opacity: 0;
+                transform: translateX(16px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+        }
+        .card-exit {
+            animation: cardNextOut 0.14s cubic-bezier(0.4, 0, 1, 1) forwards;
+        }
+        .card-enter {
+            animation: cardNextIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* 6. Authored Moments & Celebration (350-500ms) */
+        @keyframes celebrationPop {
+            0% {
+                opacity: 0;
+                transform: scale(0.92);
+            }
+            70% {
+                transform: scale(1.02);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        .celebration-pop {
+            animation: celebrationPop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* 7. Progress Bars Smooth Fill (Heatmap & Stats) */
+        .progress-bar-smooth {
+            transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: width;
+        }
+
+        /* 8. Modals & Overlays (Entrance 200ms, Exit 120ms - strictly faster than entrance) */
         @keyframes modalEnter {
             from {
                 opacity: 0;
-                transform: scale(0.97) translateY(8px);
+                transform: scale(0.96) translateY(6px);
             }
             to {
                 opacity: 1;
                 transform: scale(1) translateY(0);
             }
         }
+        @keyframes modalExit {
+            from {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: scale(0.96) translateY(6px);
+            }
+        }
         .modal-box {
-            animation: modalEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+        }
+        .modal-box.modal-exit {
+            animation: modalExit 0.12s cubic-bezier(0.4, 0, 1, 1) forwards !important;
         }
 
-        /* Toast Animation */
+        @keyframes backdropEnter {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes backdropExit {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .modal-backdrop-anim {
+            animation: backdropEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .modal-backdrop-anim.backdrop-exit {
+            animation: backdropExit 0.12s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+        }
+
+        /* 9. Toast Notifications */
         @keyframes toastSlideIn {
             from {
                 opacity: 0;
@@ -79,6 +246,25 @@
         }
         .toast-item {
             animation: toastSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            will-change: transform, opacity;
+        }
+
+        /* 10. Strict Accessibility Support: Prefers-Reduced-Motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
+            .modal-box, .toast-item, .view-enter, .question-enter, .feedback-reveal, .card-flip-reveal, .card-exit, .card-enter, .celebration-pop {
+                animation: none !important;
+                transform: none !important;
+                opacity: 1 !important;
+            }
+            .progress-bar-smooth {
+                transition: none !important;
+            }
         }
     </style>
 </head>
@@ -515,8 +701,7 @@
                 </div>
 
                 <!-- Flashcard Display Box -->
-                <!-- Flashcard Display Box -->
-                <div id="flashcard-box" class="max-w-2xl mx-auto bg-slate-900/80 p-8 rounded-3xl border border-slate-800 shadow-2xl relative">
+                <div id="flashcard-box" class="max-w-2xl mx-auto bg-slate-900/80 p-8 rounded-3xl border border-slate-800 shadow-2xl relative fc-perspective">
                     <!-- Active Card State -->
                     <div id="fc-card-content" class="space-y-6">
                         <div class="flex items-center justify-between text-xs text-slate-400">
@@ -748,7 +933,7 @@
 
     <!-- Modal: Iniciar Examen Personalizado -->
     <div id="modal-new-exam" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
             <h3 class="text-lg font-bold text-white">Configurar Sesión de Examen</h3>
             
             <div class="space-y-3">
@@ -784,7 +969,7 @@
 
     <!-- Modal: Crear Nuevo Tema -->
     <div id="modal-create-topic" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
             <h3 class="text-lg font-bold text-white">Añadir Nuevo Tema al Syllabus</h3>
             <div class="space-y-3">
                 <div>
@@ -809,7 +994,7 @@
 
     <!-- Modal: Crear Nueva Pregunta -->
     <div id="modal-create-question" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] overflow-y-auto modal-box">
             <h3 class="text-lg font-bold text-white">Crear Nueva Pregunta</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -879,7 +1064,7 @@
 
     <!-- Modal: Importar Preguntas JSON -->
     <div id="modal-import-json" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl modal-box">
             <div class="flex items-center justify-between">
                 <h3 class="text-lg font-bold text-white">Importación Masiva de Preguntas (JSON)</h3>
                 <button onclick="loadSampleImportJson()" class="text-xs text-blue-400 hover:underline">Cargar Plantilla de Ejemplo</button>
@@ -894,7 +1079,7 @@
 
     <!-- Modal: Visor Completo de Material / PDF -->
     <div id="modal-view-material" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-3xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-3xl w-full space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col modal-box">
             <div class="flex items-center justify-between border-b border-slate-700 pb-3">
                 <div>
                     <h3 id="view-mat-title" class="text-lg font-bold text-white">Título del Documento</h3>
@@ -930,7 +1115,7 @@
 
     <!-- Modal: Visor PDF Original Integrado -->
     <div id="modal-pdf-viewer" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl h-[92vh] flex flex-col shadow-2xl overflow-hidden modal-box">
             <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-900/90">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <span class="text-xl">📄</span>
@@ -999,6 +1184,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.5"></script>
+    <script src="/app.js?v=2.0.6"></script>
 </body>
 </html>

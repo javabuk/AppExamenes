@@ -65,6 +65,69 @@ function showToast(message, type = 'info', durationMs = 3800) {
     }
 }
 
+// =================== IMPECCABLE MOTION HELPERS ===================
+function animateCounter(elementId, targetValue, durationMs = 500, decimals = 1, suffix = '') {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.textContent = targetValue.toFixed(decimals) + suffix;
+        return;
+    }
+
+    const start = performance.now();
+    const startValue = 0;
+
+    function step(timestamp) {
+        const elapsed = timestamp - start;
+        const progress = Math.min(elapsed / durationMs, 1);
+        // Easing: natural deceleration cubic-bezier(0.16, 1, 0.3, 1)
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const current = startValue + (targetValue - startValue) * ease;
+        el.textContent = current.toFixed(decimals) + suffix;
+
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        } else {
+            el.textContent = targetValue.toFixed(decimals) + suffix;
+        }
+    }
+
+    requestAnimationFrame(step);
+}
+
+// =================== MODAL & OVERLAY SYSTEM (IMPECCABLE MOTION) ===================
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('hidden', 'backdrop-exit');
+    modal.classList.add('modal-backdrop-anim');
+    const box = modal.querySelector('.modal-box');
+    if (box) {
+        box.classList.remove('modal-exit');
+    }
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal || modal.classList.contains('hidden')) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        modal.classList.add('hidden');
+        return;
+    }
+
+    const box = modal.querySelector('.modal-box');
+    modal.classList.add('backdrop-exit');
+    if (box) box.classList.add('modal-exit');
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('backdrop-exit');
+        if (box) box.classList.remove('modal-exit');
+    }, 120);
+}
+
 let confirmResolveHandler = null;
 
 function showConfirmDialog(title, message, options = {}) {
@@ -78,21 +141,40 @@ function showConfirmDialog(title, message, options = {}) {
         const actionBtn = document.getElementById('confirm-btn-action');
         actionBtn.textContent = options.confirmText || 'Confirmar';
         if (options.danger) {
-            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-sm shadow-rose-500/20';
+            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white transition cursor-pointer shadow-sm shadow-rose-500/20';
         } else {
-            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-sm shadow-blue-500/20';
+            actionBtn.className = 'px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition cursor-pointer shadow-sm shadow-blue-500/20';
         }
-        modal.classList.remove('hidden');
+        openModal('modal-confirm');
     });
 }
 
 function closeConfirmModal(result) {
     const modal = document.getElementById('modal-confirm');
-    modal.classList.add('hidden');
-    if (confirmResolveHandler) {
-        confirmResolveHandler(result);
-        confirmResolveHandler = null;
+    if (!modal) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        modal.classList.add('hidden');
+        if (confirmResolveHandler) {
+            confirmResolveHandler(result);
+            confirmResolveHandler = null;
+        }
+        return;
     }
+
+    const box = modal.querySelector('.modal-box');
+    modal.classList.add('backdrop-exit');
+    if (box) box.classList.add('modal-exit');
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('backdrop-exit');
+        if (box) box.classList.remove('modal-exit');
+        if (confirmResolveHandler) {
+            confirmResolveHandler(result);
+            confirmResolveHandler = null;
+        }
+    }, 120);
 }
 
 function setupModalInteractions() {
@@ -114,7 +196,7 @@ function setupModalInteractions() {
     });
 }
 
-// =================== NAVEGACIÓN POR PESTAÑAS ===================
+// =================== NAVEGACIÓN POR PESTAÑAS (VIEW TRANSITIONS) ===================
 function switchTab(tabId) {
     const views = [
         'dashboard', 'exam-modes', 'exam-runner', 'exam-result',
@@ -130,7 +212,13 @@ function switchTab(tabId) {
     });
 
     const activeView = document.getElementById(`view-${tabId}`);
-    if (activeView) activeView.classList.remove('hidden');
+    if (activeView) {
+        activeView.classList.remove('hidden');
+        // Trigger subtle view entrance animation
+        activeView.classList.remove('view-enter');
+        void activeView.offsetWidth; // force reflow for retriggering
+        activeView.classList.add('view-enter');
+    }
 
     const activeBtn = document.getElementById(`btn-tab-${tabId}`);
     if (activeBtn) activeBtn.classList.add('active');
@@ -180,12 +268,12 @@ async function loadDashboard() {
         if (!resp.ok) return;
         const data = await resp.json();
 
-        // 1. Métricas Principales
-        document.getElementById('dash-readiness-score').textContent = data.readinessScore.toFixed(1);
-        document.getElementById('dash-mastered-count').textContent = data.masteredQuestionsCount;
-        document.getElementById('dash-total-questions').textContent = data.totalQuestionsCount;
-        document.getElementById('dash-errors-count').textContent = data.pendingErrorsCount;
-        document.getElementById('dash-avg-time').textContent = data.averageTimePerQuestionSeconds.toFixed(1);
+        // 1. Métricas Principales (Animadas con Impeccable Motion)
+        animateCounter('dash-readiness-score', data.readinessScore, 500, 1);
+        animateCounter('dash-mastered-count', data.masteredQuestionsCount, 400, 0);
+        animateCounter('dash-total-questions', data.totalQuestionsCount, 400, 0);
+        animateCounter('dash-errors-count', data.pendingErrorsCount, 400, 0);
+        animateCounter('dash-avg-time', data.averageTimePerQuestionSeconds, 450, 1);
 
         // Badge de Readiness
         const badge = document.getElementById('dash-readiness-badge');
@@ -213,7 +301,7 @@ async function loadDashboard() {
             fcBadge.classList.add('hidden');
         }
 
-        // 2. Mapa de Calor por temas
+        // 2. Mapa de Calor por temas (Barras de progreso animadas)
         const grid = document.getElementById('topics-heatmap-grid');
         grid.innerHTML = '';
         data.topicHeatmaps.forEach(t => {
@@ -244,15 +332,22 @@ async function loadDashboard() {
                         <span>${t.correctAnswered}/${t.totalAnswered} aciertos</span>
                     </div>
                     <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div class="${barColor} h-1.5 rounded-full" style="width: ${Math.min(100, t.accuracyPercent)}%"></div>
+                        <div class="${barColor} h-1.5 rounded-full progress-bar-smooth" style="width: 0%" data-target-width="${Math.min(100, t.accuracyPercent)}%"></div>
                     </div>
                 </div>
                 <div class="mt-3 pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-400">
                     <span>⏱ ${t.averageTimeSeconds}s / preg</span>
-                    <button onclick="startExamWithTopic(${t.topicId})" class="text-blue-400 hover:text-blue-300 font-semibold">Practicar Tema →</button>
+                    <button onclick="startExamWithTopic(${t.topicId})" class="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer">Practicar Tema →</button>
                 </div>
             `;
             grid.appendChild(card);
+        });
+
+        // Disparar animación suave de las barras de progreso
+        requestAnimationFrame(() => {
+            grid.querySelectorAll('.progress-bar-smooth').forEach(bar => {
+                bar.style.width = bar.getAttribute('data-target-width');
+            });
         });
 
         // 3. Tabla de Intentos Recientes
@@ -297,11 +392,7 @@ function formatDate(dateStr) {
 
 // =================== MOTOR DE SIMULACIÓN Y EXÁMENES ===================
 function openNewExamModal() {
-    document.getElementById('modal-new-exam').classList.remove('hidden');
-}
-
-function closeModal(id) {
-    document.getElementById(id).classList.add('hidden');
+    openModal('modal-new-exam');
 }
 
 function startExamWithTopic(topicId) {
@@ -368,7 +459,7 @@ async function executeStartExam(requestPayload) {
         examTimerInterval = setInterval(updateTimerDisplay, 1000);
 
         switchTab('exam-runner');
-        renderCurrentQuestion();
+        renderCurrentQuestion(true);
         renderQuestionGrid();
         showToast('Examen iniciado. ¡Mucho éxito!', 'info', 2500);
     } catch (e) {
@@ -399,7 +490,7 @@ function updateTimerDisplay() {
     }
 }
 
-function renderCurrentQuestion() {
+function renderCurrentQuestion(isNavigating = false) {
     if (!currentSession || !currentSession.questions) return;
     const q = currentSession.questions[currentQuestionIndex];
     if (!q) return;
@@ -410,7 +501,9 @@ function renderCurrentQuestion() {
     document.getElementById('runner-current-idx').textContent = (currentQuestionIndex + 1);
     document.getElementById('runner-total-count').textContent = currentSession.totalQuestions;
     document.getElementById('runner-topic-name').textContent = q.topicName || 'General';
-    document.getElementById('runner-stem').textContent = q.stem;
+    
+    const stemEl = document.getElementById('runner-stem');
+    stemEl.textContent = q.stem;
 
     // Snippet
     const snipContainer = document.getElementById('runner-snippet-container');
@@ -422,16 +515,16 @@ function renderCurrentQuestion() {
         snipContainer.classList.add('hidden');
     }
 
-    // Flag button
+    // Flag button con micro-interacción
     const ans = userAnswers[q.id];
     const flagBtn = document.getElementById('runner-flag-btn');
     if (ans && ans.flagged) {
-        flagBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border border-amber-500 bg-amber-500/20 text-amber-300 flex items-center gap-1.5';
+        flagBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border border-amber-500 bg-amber-500/20 text-amber-300 flex items-center gap-1.5 active:scale-[0.98] transition cursor-pointer';
     } else {
-        flagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 flex items-center gap-1.5';
+        flagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-[0.98] flex items-center gap-1.5 transition cursor-pointer';
     }
 
-    // Opciones
+    // Opciones con micro-interacción Impeccable
     const optionsContainer = document.getElementById('runner-options-list');
     optionsContainer.innerHTML = '';
     const selected = ans ? ans.selectedOptions : '';
@@ -440,25 +533,37 @@ function renderCurrentQuestion() {
         const isSelected = selected === opt.label;
         const btn = document.createElement('button');
         btn.onclick = () => selectOption(opt.label);
-        btn.className = `w-full text-left p-4 rounded-xl border transition flex items-start gap-3.5 ${
+        btn.className = `option-btn w-full text-left p-4 rounded-xl border flex items-start gap-3.5 cursor-pointer ${
             isSelected 
                 ? 'bg-blue-600/20 border-blue-500 text-white shadow-md shadow-blue-500/10' 
-                : 'bg-slate-900/60 border-slate-700/80 text-slate-300 hover:bg-slate-800'
+                : 'bg-slate-900/60 border-slate-700/80 text-slate-300 hover:bg-slate-800/80'
         }`;
 
         btn.innerHTML = `
-            <span class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                isSelected ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'
+            <span class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-transform ${
+                isSelected ? 'bg-blue-600 text-white scale-105' : 'bg-slate-800 text-slate-400'
             }">${opt.label}</span>
             <div class="text-sm leading-relaxed">${opt.text}</div>
         `;
         optionsContainer.appendChild(btn);
     });
 
-    // Modo Tutor feedback
+    // Transición espacial de cambio de pregunta (180ms)
+    if (isNavigating) {
+        stemEl.classList.remove('question-enter');
+        optionsContainer.classList.remove('question-enter');
+        void stemEl.offsetWidth;
+        stemEl.classList.add('question-enter');
+        optionsContainer.classList.add('question-enter');
+    }
+
+    // Modo Tutor feedback con reveal animado
     const tutorBox = document.getElementById('runner-tutor-feedback');
     if (currentSession.mode === 'TUTOR' && selected) {
         tutorBox.classList.remove('hidden');
+        tutorBox.classList.remove('feedback-reveal');
+        void tutorBox.offsetWidth;
+        tutorBox.classList.add('feedback-reveal');
         document.getElementById('runner-tutor-explanation').textContent = q.explanation || '';
         const linkEl = document.getElementById('runner-tutor-link');
         if (q.fhirSpecUrl) {
@@ -484,7 +589,7 @@ function selectOption(label) {
 
     accumulateTime(q.id);
     userAnswers[q.id].selectedOptions = label;
-    renderCurrentQuestion();
+    renderCurrentQuestion(false);
     renderQuestionGrid();
 }
 
@@ -493,7 +598,7 @@ function toggleFlagCurrentQuestion() {
     if (!q) return;
 
     userAnswers[q.id].flagged = !userAnswers[q.id].flagged;
-    renderCurrentQuestion();
+    renderCurrentQuestion(false);
     renderQuestionGrid();
 }
 
@@ -510,7 +615,7 @@ function prevQuestion() {
         const q = currentSession.questions[currentQuestionIndex];
         accumulateTime(q.id);
         currentQuestionIndex--;
-        renderCurrentQuestion();
+        renderCurrentQuestion(true);
     }
 }
 
@@ -519,7 +624,7 @@ function nextQuestion() {
         const q = currentSession.questions[currentQuestionIndex];
         accumulateTime(q.id);
         currentQuestionIndex++;
-        renderCurrentQuestion();
+        renderCurrentQuestion(true);
     }
 }
 
@@ -527,7 +632,7 @@ function jumpToQuestion(idx) {
     const q = currentSession.questions[currentQuestionIndex];
     accumulateTime(q.id);
     currentQuestionIndex = idx;
-    renderCurrentQuestion();
+    renderCurrentQuestion(true);
 }
 
 function renderQuestionGrid() {
@@ -612,7 +717,8 @@ async function submitExam() {
 function showExamResult(result) {
     switchTab('exam-result');
 
-    document.getElementById('result-score-percent').textContent = result.scorePercent.toFixed(1);
+    // Score counter animated with Impeccable natural deceleration (550ms)
+    animateCounter('result-score-percent', result.scorePercent, 550, 1);
     document.getElementById('result-correct-count').textContent = result.correctCount;
     document.getElementById('result-total-count').textContent = result.totalCount;
 
@@ -620,12 +726,14 @@ function showExamResult(result) {
     document.getElementById('result-duration').textContent = `${mins} min`;
 
     const statusBadge = document.getElementById('result-status-badge');
+    statusBadge.classList.remove('celebration-pop');
+    void statusBadge.offsetWidth; // re-trigger celebration pop
     if (result.passed) {
         statusBadge.textContent = 'APROBADO (≥80% Umbral Seguro)';
-        statusBadge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        statusBadge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 celebration-pop';
     } else {
         statusBadge.textContent = 'NO SUPERADO (<80%)';
-        statusBadge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+        statusBadge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 celebration-pop';
     }
 
     const container = document.getElementById('result-reviews-container');
@@ -946,19 +1054,31 @@ function renderCurrentFlashcard() {
         link.classList.add('hidden');
     }
 
-    // Ocultar trasera inicialmente
-    document.getElementById('fc-back-face').classList.add('hidden');
+    // Ocultar trasera inicialmente y resetear animación
+    const backFace = document.getElementById('fc-back-face');
+    backFace.classList.add('hidden');
+    backFace.classList.remove('card-flip-reveal');
     document.getElementById('fc-flip-btn').classList.remove('hidden');
 }
 
 function flipFlashcard() {
-    document.getElementById('fc-back-face').classList.remove('hidden');
+    const backFace = document.getElementById('fc-back-face');
+    backFace.classList.remove('hidden');
+    backFace.classList.remove('card-flip-reveal');
+    void backFace.offsetWidth;
+    backFace.classList.add('card-flip-reveal');
     document.getElementById('fc-flip-btn').classList.add('hidden');
 }
 
 async function rateFlashcard(rating) {
     const card = dueFlashcards[currentFlashcardIndex];
     if (!card) return;
+
+    const contentEl = document.getElementById('fc-card-content');
+    const isReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (contentEl && !isReduced) {
+        contentEl.classList.add('card-exit');
+    }
 
     try {
         await fetch(`/api/srs/review/${card.questionId}`, {
@@ -967,14 +1087,23 @@ async function rateFlashcard(rating) {
             body: JSON.stringify({ rating: rating })
         });
 
-        currentFlashcardIndex++;
-        if (currentFlashcardIndex < dueFlashcards.length) {
-            renderCurrentFlashcard();
-        } else {
-            loadFlashcards(); // refrescar
-        }
+        setTimeout(() => {
+            currentFlashcardIndex++;
+            if (currentFlashcardIndex < dueFlashcards.length) {
+                renderCurrentFlashcard();
+                if (contentEl && !isReduced) {
+                    contentEl.classList.remove('card-exit');
+                    contentEl.classList.add('card-enter');
+                    setTimeout(() => contentEl.classList.remove('card-enter'), 200);
+                }
+            } else {
+                if (contentEl) contentEl.classList.remove('card-exit');
+                loadFlashcards(); // refrescar
+            }
+        }, isReduced ? 0 : 140);
     } catch (e) {
         console.error('Error calificando flashcard:', e);
+        if (contentEl) contentEl.classList.remove('card-exit');
     }
 }
 
@@ -1221,7 +1350,7 @@ function openPdfViewer(id) {
     const frame = document.getElementById('pdf-viewer-frame');
     frame.src = fileUrl;
 
-    document.getElementById('modal-pdf-viewer').classList.remove('hidden');
+    openModal('modal-pdf-viewer');
 }
 
 function openCurrentPdfInTab() {
@@ -1278,7 +1407,7 @@ function openViewMaterialModal(id) {
         practiceBtn.classList.add('hidden');
     }
 
-    document.getElementById('modal-view-material').classList.remove('hidden');
+    openModal('modal-view-material');
 }
 
 function copyMaterialText() {
@@ -1441,7 +1570,7 @@ async function uploadPdf(event) {
 
 // =================== GESTIÓN DE TEMAS Y PREGUNTAS (MODALES) ===================
 function openCreateTopicModal() {
-    document.getElementById('modal-create-topic').classList.remove('hidden');
+    openModal('modal-create-topic');
 }
 
 async function submitCreateTopic() {
@@ -1477,7 +1606,7 @@ async function submitCreateTopic() {
 }
 
 function openCreateQuestionModal() {
-    document.getElementById('modal-create-question').classList.remove('hidden');
+    openModal('modal-create-question');
 }
 
 async function submitCreateQuestion() {
@@ -1551,7 +1680,7 @@ async function submitCreateQuestion() {
 }
 
 function openImportModal() {
-    document.getElementById('modal-import-json').classList.remove('hidden');
+    openModal('modal-import-json');
 }
 
 function loadSampleImportJson() {
