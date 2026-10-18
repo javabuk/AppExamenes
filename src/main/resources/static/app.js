@@ -1212,7 +1212,7 @@ async function loadMaterials() {
         const resp = await fetch('/api/materials');
         if (resp.ok) {
             allMaterials = await resp.json();
-            renderMaterials(allMaterials);
+            filterMaterials();
             populateMaterialSelects();
         }
     } catch (e) {
@@ -1239,29 +1239,105 @@ function populateMaterialSelects() {
     });
 }
 
+let activeMaterialTypeFilter = 'ALL';
+
+function getMaterialKind(m) {
+    const isMarkdown = m.sourceType === 'MARKDOWN' || (m.filePath && m.filePath.toLowerCase().endsWith('.md')) || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().endsWith('.md'));
+    if (isMarkdown) return 'MARKDOWN';
+    const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
+    const isPdf = hasPdfFile || m.sourceType === 'COURSE_PDF' || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().includes('.pdf'));
+    if (isPdf) return 'PDF';
+    return 'URL';
+}
+
+function toggleMaterialUploadDrawer(forceState) {
+    const drawer = document.getElementById('mat-upload-drawer');
+    const icon = document.getElementById('btn-toggle-upload-icon');
+    const label = document.getElementById('btn-toggle-upload-label');
+    const btn = document.getElementById('btn-toggle-upload-drawer');
+    if (!drawer) return;
+
+    const isHidden = drawer.classList.contains('hidden');
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : isHidden;
+
+    if (shouldOpen) {
+        drawer.classList.remove('hidden');
+        if (icon) icon.textContent = '✕';
+        if (label) label.textContent = 'Cerrar Panel';
+        if (btn) btn.className = 'px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition flex items-center justify-center gap-2 cursor-pointer shrink-0';
+    } else {
+        drawer.classList.add('hidden');
+        if (icon) icon.textContent = '＋';
+        if (label) label.textContent = 'Añadir Material';
+        if (btn) btn.className = 'px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0';
+    }
+}
+
+function filterMaterialsByType(type) {
+    activeMaterialTypeFilter = type || 'ALL';
+    const types = ['ALL', 'PDF', 'MARKDOWN', 'URL'];
+    types.forEach(t => {
+        const btn = document.getElementById(`mat-filter-${t}`);
+        if (!btn) return;
+        if (t === activeMaterialTypeFilter) {
+            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white transition cursor-pointer shrink-0 flex items-center gap-1 shadow-sm shadow-blue-600/30';
+        } else {
+            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1';
+        }
+    });
+    filterMaterials();
+}
+
 function filterMaterials() {
-    const kw = document.getElementById('mat-search-input').value.toLowerCase();
-    const topicId = document.getElementById('mat-topic-select').value;
+    const searchEl = document.getElementById('mat-search-input');
+    const topicEl = document.getElementById('mat-topic-select');
+    const kw = searchEl ? searchEl.value.toLowerCase().trim() : '';
+    const topicId = topicEl ? topicEl.value : '';
 
     const filtered = allMaterials.filter(m => {
-        const matchKw = !kw || m.title.toLowerCase().includes(kw) || m.contentText.toLowerCase().includes(kw);
+        const idStr = `#${m.id}`;
+        const matchKw = !kw ||
+            (m.title && m.title.toLowerCase().includes(kw)) ||
+            (m.contentText && m.contentText.toLowerCase().includes(kw)) ||
+            idStr.includes(kw) ||
+            String(m.id) === kw;
         const matchTopic = !topicId || (m.topic && m.topic.id == topicId);
-        return matchKw && matchTopic;
+        const matchType = activeMaterialTypeFilter === 'ALL' || getMaterialKind(m) === activeMaterialTypeFilter;
+        return matchKw && matchTopic && matchType;
     });
 
     renderMaterials(filtered);
 }
 
+function openPrimaryMaterialView(id) {
+    const m = allMaterials.find(item => item.id === id);
+    if (!m) return;
+    const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
+    if (hasPdfFile) {
+        openPdfViewer(m.id);
+    } else {
+        openViewMaterialModal(m.id);
+    }
+}
+
 function renderMaterials(list) {
     const container = document.getElementById('materials-container');
+    if (!container) return;
     container.innerHTML = '';
+
+    const countBadge = document.getElementById('mat-total-count-badge');
+    if (countBadge) {
+        countBadge.textContent = list.length === allMaterials.length
+            ? `${allMaterials.length} docs`
+            : `${list.length} de ${allMaterials.length} docs`;
+    }
 
     if (list.length === 0) {
         container.innerHTML = `
-            <div class="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
-                <div class="w-12 h-12 mx-auto rounded-full bg-slate-800/80 flex items-center justify-center text-xl">📑</div>
-                <h4 class="text-sm font-semibold text-white">No se encontraron documentos indexados</h4>
-                <p class="text-xs text-slate-400 max-w-sm mx-auto">No hay apuntes ni documentación técnica que coincidan con los filtros aplicados. Puedes importar una URL oficial de HL7 FHIR o subir un PDF de tu curso.</p>
+            <div class="lg:col-span-2 p-10 rounded-2xl bg-slate-900/50 border border-slate-800 text-center space-y-3">
+                <div class="w-12 h-12 mx-auto rounded-2xl bg-slate-800/80 flex items-center justify-center text-xl">📑</div>
+                <h4 class="text-sm font-bold text-white">No se encontraron materiales</h4>
+                <p class="text-xs text-slate-400 max-w-md mx-auto">No hay apuntes ni documentos que coincidan con la búsqueda actual. Prueba a cambiar los filtros o pulsa <strong>"＋ Añadir Material"</strong> arriba a la derecha.</p>
             </div>
         `;
         return;
@@ -1269,127 +1345,115 @@ function renderMaterials(list) {
 
     list.forEach(m => {
         const card = document.createElement('div');
-        card.className = 'bg-slate-900/70 p-5 rounded-2xl border border-slate-700/80 space-y-3 hover:border-slate-600 transition';
+        card.className = 'group bg-slate-800/55 hover:bg-slate-800/90 p-5 rounded-2xl border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between gap-4 shadow-sm';
+
         const wordsCount = m.contentText ? m.contentText.trim().split(/\s+/).length : 0;
         const topicName = m.topic ? m.topic.name : 'General';
-        const topicId = m.topic ? m.topic.id : null;
-
-        // Determinar tipo de documento: Markdown, PDF o URL
-        const isMarkdown = m.sourceType === 'MARKDOWN' || (m.filePath && m.filePath.toLowerCase().endsWith('.md')) || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().endsWith('.md'));
-        const isUrl = !isMarkdown && m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://'));
+        const kind = getMaterialKind(m);
         const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
-        const isPdf = !isMarkdown && (hasPdfFile || m.sourceType === 'COURSE_PDF' || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().includes('.pdf')));
+        const isUrl = Boolean(m.referenceUrlOrPage && (m.referenceUrlOrPage.startsWith('http://') || m.referenceUrlOrPage.startsWith('https://')));
 
-        // Extract a clean, single-paragraph preview excerpt (max 240 chars)
-        const cleanContent = (m.contentText || '').trim().replace(/\s+/g, ' ');
-        const excerpt = cleanContent.length > 240 ? cleanContent.substring(0, 240) + '...' : cleanContent;
+        // Extract a clean, readable 2-line preview (strip markdown symbols for cleaner reading)
+        const cleanContent = (m.contentText || '')
+            .replace(/[#*`>_~-]{2,}/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const excerpt = cleanContent.length > 180 ? cleanContent.substring(0, 180) + '…' : cleanContent;
 
-        // Badge de tipo de documento
-        let badgeClass = 'bg-slate-700 text-slate-300';
-        let badgeText = m.sourceType || 'DOCUMENTO';
+        let typeIcon = '📄';
+        let typeBadgeClass = 'bg-slate-700/80 text-slate-300 border-slate-600';
+        let typeLabel = 'DOC';
+        let primaryReadLabel = '📖 Leer Texto';
 
-        if (isMarkdown) {
-            badgeClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-            badgeText = '📝 MARKDOWN';
-        } else if (hasPdfFile || isPdf) {
-            badgeClass = 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
-            badgeText = '📄 PDF (PDFBox)';
-        } else if (isUrl) {
-            badgeClass = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-            badgeText = '🌐 WEB URL';
+        if (kind === 'MARKDOWN') {
+            typeIcon = '📝';
+            typeBadgeClass = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+            typeLabel = 'MARKDOWN';
+            primaryReadLabel = '📖 Leer Apunte';
+        } else if (kind === 'PDF') {
+            typeIcon = '📄';
+            typeBadgeClass = 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+            typeLabel = 'PDF';
+            primaryReadLabel = hasPdfFile ? '📄 Abrir PDF' : '📖 Leer Texto';
+        } else {
+            typeIcon = '🌐';
+            typeBadgeClass = 'bg-blue-500/15 text-blue-300 border-blue-500/30';
+            typeLabel = 'WEB';
+            primaryReadLabel = '📖 Leer Texto';
         }
 
-        // Construir botones según el tipo de documento
-        let actionButtonsHtml = '';
-
-        if (isMarkdown) {
-            actionButtonsHtml += `
-                <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer">
-                    👁️ Ver Markdown
-                </button>
-                <a href="/api/materials/${m.id}/file?download=true" download class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold transition flex items-center gap-1.5 cursor-pointer">
-                    📥 Descargar .md
+        // Utility icon button (external URL or direct file download)
+        let utilityBtnHtml = '';
+        if (isUrl) {
+            utilityBtnHtml = `
+                <a href="${m.referenceUrlOrPage}" target="_blank" rel="noopener" title="Abrir web original en nueva pestaña" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-slate-700 text-slate-400 hover:text-blue-300 border border-slate-700/70 flex items-center justify-center text-xs transition cursor-pointer">
+                    ↗
                 </a>
             `;
-        } else {
-            if (hasPdfFile) {
-                actionButtonsHtml += `
-                    <button onclick="openPdfViewer(${m.id})" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
-                        📄 Ver PDF Original
-                    </button>
-                `;
-            } else if (isPdf && isUrl) {
-                actionButtonsHtml += `
-                    <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer">
-                        📄 Ver PDF Remoto ↗
-                    </button>
-                `;
-            }
-
-            if (isUrl) {
-                actionButtonsHtml += `
-                    <button onclick="window.open('${m.referenceUrlOrPage}', '_blank')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
-                        🌐 Abrir Web Original ↗
-                    </button>
-                `;
-            }
-
-            actionButtonsHtml += `
-                <button onclick="openViewMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer">
-                    📖 Ver Texto Extraído
-                </button>
+        } else if (m.filePath || kind === 'MARKDOWN') {
+            utilityBtnHtml = `
+                <a href="/api/materials/${m.id}/file?download=true" download title="Descargar archivo original" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-slate-700 text-slate-400 hover:text-emerald-300 border border-slate-700/70 flex items-center justify-center text-xs transition cursor-pointer">
+                    ⬇
+                </a>
             `;
         }
 
-        actionButtonsHtml += `
-            <button onclick="openPracticeMaterialModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer">
-                🎯 Practicar este Documento
-            </button>
-            <button onclick="openMaterialStatsModal(${m.id})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 font-bold transition shadow-sm shadow-sky-500/10 flex items-center gap-1.5 cursor-pointer">
-                📊 Estadísticas & Evolución
-            </button>
-        `;
-
         card.innerHTML = `
-            <div class="flex items-center justify-between text-xs gap-3">
-                <div class="flex items-center gap-2 overflow-hidden">
-                    <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">ID #${m.id}</span>
-                    <span class="font-bold text-white text-sm truncate">${m.title}</span>
+            <div class="space-y-2.5">
+                <!-- Card Top Row: Type Icon + Title + Unobtrusive Utilities -->
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 min-w-0">
+                        <button type="button" onclick="openPrimaryMaterialView(${m.id})" title="${primaryReadLabel}" class="w-10 h-10 rounded-xl border ${typeBadgeClass} flex items-center justify-center text-lg shrink-0 cursor-pointer hover:scale-105 transition">
+                            ${typeIcon}
+                        </button>
+                        <div class="min-w-0">
+                            <button type="button" onclick="openPrimaryMaterialView(${m.id})" class="text-left font-bold text-white hover:text-blue-400 text-sm leading-snug line-clamp-1 transition cursor-pointer" title="${m.title}">
+                                ${m.title}
+                            </button>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-slate-400">
+                                <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30" title="Identificador del documento para importar preguntas JSON">ID #${m.id}</span>
+                                <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold border ${typeBadgeClass}">${typeLabel}</span>
+                                <span class="text-slate-600">•</span>
+                                <span class="text-blue-400 font-medium truncate max-w-[180px]" title="${topicName}">${topicName}</span>
+                                <span class="text-slate-600">•</span>
+                                <span class="text-slate-500 font-mono text-[10px]">${wordsCount.toLocaleString()} pal.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subtle Secondary Utility Icons -->
+                    <div class="flex items-center gap-1 shrink-0">
+                        ${utilityBtnHtml}
+                        <button type="button" onclick="deleteMaterial(${m.id})" title="Eliminar documento" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-rose-950/80 text-slate-500 hover:text-rose-400 border border-slate-700/70 hover:border-rose-500/40 flex items-center justify-center text-xs transition cursor-pointer">
+                            🗑️
+                        </button>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold ${badgeClass}">
-                        ${badgeText}
-                    </span>
-                    <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">${wordsCount} palabras</span>
-                </div>
-            </div>
-            
-            <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="text-blue-400 font-semibold">📁 Tema: ${topicName}</span>
-                ${isUrl ? `
-                    <span class="text-slate-600">•</span>
-                    <a href="${m.referenceUrlOrPage}" target="_blank" class="text-blue-400 hover:underline flex items-center gap-1 font-mono text-[11px]">
-                        🔗 ${m.referenceUrlOrPage.length > 55 ? m.referenceUrlOrPage.substring(0, 55) + '...' : m.referenceUrlOrPage} ↗
-                    </a>
-                ` : (isMarkdown ? `
-                    <span class="text-slate-600">•</span>
-                    <span class="text-emerald-400 font-mono text-[11px]">📝 Documento Markdown guardado</span>
-                ` : (m.filePath ? `
-                    <span class="text-slate-600">•</span>
-                    <span class="text-slate-400 font-mono text-[11px]">📁 Archivo local guardado</span>
-                ` : ''))}
+
+                <!-- Clean 2-Line Summary Preview -->
+                <p class="text-xs text-slate-400 leading-relaxed line-clamp-2 pl-13">
+                    ${excerpt || '<span class="italic text-slate-500">Sin vista previa de texto disponible.</span>'}
+                </p>
             </div>
 
-            <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed overflow-hidden">
-                ${excerpt || '<span class="text-slate-500 italic">(Sin contenido textual disponible)</span>'}
-            </div>
-
-            <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800 text-xs">
-                <div class="flex flex-wrap items-center gap-2">
-                    ${actionButtonsHtml}
+            <!-- Clear 3-Action Footer Hierarchy -->
+            <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-700/60 text-xs">
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="openPrimaryMaterialView(${m.id})" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition flex items-center gap-1.5 cursor-pointer">
+                        ${primaryReadLabel}
+                    </button>
+                    ${hasPdfFile ? `
+                        <button type="button" onclick="openViewMaterialModal(${m.id})" title="Ver texto plano extraído por PDFBox" class="px-2.5 py-1.5 rounded-xl bg-slate-900/70 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700/70 font-medium transition cursor-pointer">
+                            📝 Texto
+                        </button>
+                    ` : ''}
+                    <button type="button" onclick="openMaterialStatsModal(${m.id})" title="Ver estadísticas e historial de evolución" class="px-3 py-1.5 rounded-xl bg-slate-900/70 hover:bg-slate-700 text-sky-300 border border-slate-700/70 font-semibold transition flex items-center gap-1.5 cursor-pointer">
+                        📊 Estadísticas
+                    </button>
                 </div>
-                <button onclick="deleteMaterial(${m.id})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-700 text-xs font-semibold transition cursor-pointer">
-                    🗑️ Eliminar
+
+                <button type="button" onclick="openPracticeMaterialModal(${m.id})" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold transition shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer shrink-0">
+                    🎯 Practicar
                 </button>
             </div>
         `;
@@ -1515,6 +1579,22 @@ function openCurrentPdfStats() {
         const id = currentPdfId;
         closePdfViewer();
         openMaterialStatsModal(id);
+    }
+}
+
+function openCurrentPdfExtractedText() {
+    if (currentPdfId) {
+        const id = currentPdfId;
+        closePdfViewer();
+        openViewMaterialModal(id);
+    }
+}
+
+function openCurrentPdfPractice() {
+    if (currentPdfId) {
+        const id = currentPdfId;
+        closePdfViewer();
+        openPracticeMaterialModal(id);
     }
 }
 
@@ -1675,7 +1755,7 @@ function switchMaterialInputMode(mode) {
     const mdBtn = document.getElementById('tab-mat-md-btn');
     const badgeHint = document.getElementById('mat-input-badge-hint');
 
-    const inactiveClass = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+    const inactiveClass = 'px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer';
     urlBtn.className = inactiveClass;
     pdfBtn.className = inactiveClass;
     if (mdBtn) mdBtn.className = inactiveClass;
@@ -1822,6 +1902,7 @@ async function submitMarkdownMaterial(event) {
                 showToast('¡Archivo Markdown subido e indexado con éxito!', 'success');
                 fileInput.value = '';
                 titleInput.value = '';
+                toggleMaterialUploadDrawer(false);
                 await loadMaterials();
             } else {
                 const err = await resp.json().catch(() => ({}));
@@ -1871,6 +1952,7 @@ async function submitMarkdownMaterial(event) {
                 showToast('¡Documento Markdown guardado e indexado con éxito!', 'success');
                 textInput.value = '';
                 titleInput.value = '';
+                toggleMaterialUploadDrawer(false);
                 await loadMaterials();
             } else {
                 const err = await resp.json().catch(() => ({}));
@@ -1936,6 +2018,7 @@ async function importUrlMaterial(event) {
             showToast('¡Contenido descargado e indexado con éxito desde la URL!', 'success');
             urlInput.value = '';
             titleInput.value = '';
+            toggleMaterialUploadDrawer(false);
             await loadMaterials();
         } else {
             const err = await resp.json().catch(() => ({}));
@@ -1985,6 +2068,7 @@ async function uploadPdf(event) {
             showToast('¡PDF procesado e indexado con Apache PDFBox con éxito!', 'success');
             fileInput.value = '';
             titleInput.value = '';
+            toggleMaterialUploadDrawer(false);
             await loadMaterials();
         } else {
             showToast('Error al procesar el archivo PDF.', 'error');

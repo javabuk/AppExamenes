@@ -936,167 +936,199 @@
             </section>
 
             <!-- SECTION: MATERIALS & PDFBOX -->
-            <section id="view-materials" class="hidden space-y-6">
-                <div>
-                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        📑 Materiales de Estudio e Ingesta de PDFs (Apache PDFBox)
-                    </h2>
-                    <p class="text-sm text-slate-400">Sube PDFs de tus cursos para extraer su contenido e indexarlo junto a los temas oficiales.</p>
+            <section id="view-materials" class="hidden space-y-5">
+                <!-- Clean Header with Primary Action -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/60 p-5 rounded-2xl border border-slate-700/70">
+                    <div>
+                        <div class="flex items-center gap-2.5">
+                            <h2 class="text-xl font-bold text-white tracking-tight">
+                                Biblioteca de Materiales
+                            </h2>
+                            <span id="mat-total-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                                0 docs
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">
+                            Consulta tus apuntes, especificaciones FHIR y PDFs indexados, o entrena preguntas de cada documento.
+                        </p>
+                    </div>
+                    <button id="btn-toggle-upload-drawer" type="button" onclick="toggleMaterialUploadDrawer()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0">
+                        <span id="btn-toggle-upload-icon" class="text-sm leading-none">＋</span>
+                        <span id="btn-toggle-upload-label">Añadir Material</span>
+                    </button>
                 </div>
 
-                <!-- Upload & Import Card -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-700 pb-3">
-                        <div class="flex flex-wrap items-center gap-2">
+                <!-- Collapsible Upload & Import Drawer (Hidden by default to reduce visual clutter) -->
+                <div id="mat-upload-drawer" class="hidden bg-slate-800/95 p-5 rounded-2xl border border-blue-500/40 shadow-xl space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
+                        <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-700/70">
                             <button id="tab-mat-url-btn" type="button" onclick="switchMaterialInputMode('url')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer">
-                                🌐 Importar desde URL (ej: HL7 FHIR Spec)
+                                🌐 Importar URL
                             </button>
-                            <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
-                                📁 Cargar PDF Local (PDFBox)
+                            <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                📄 Subir PDF
                             </button>
-                            <button id="tab-mat-md-btn" type="button" onclick="switchMaterialInputMode('markdown')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
-                                📝 Material Markdown (.md / Editor)
+                            <button id="tab-mat-md-btn" type="button" onclick="switchMaterialInputMode('markdown')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                📝 Markdown (.md)
                             </button>
                         </div>
-                        <span id="mat-input-badge-hint" class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
+                        <div class="flex items-center gap-3">
+                            <span id="mat-input-badge-hint" class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
+                            <button type="button" onclick="toggleMaterialUploadDrawer(false)" class="text-slate-400 hover:text-white text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-700 border border-slate-700 transition cursor-pointer">
+                                ✕ Cerrar
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Mode 1: URL Import Form -->
                     <form id="import-url-form" onsubmit="importUrlMaterial(event)" class="space-y-4">
-                        <div class="space-y-1">
-                            <label class="block text-xs font-semibold text-slate-300">URL del Documento o Especificación HL7 FHIR:</label>
-                            <div class="flex flex-col md:flex-row gap-2">
-                                <input id="import-mat-url" type="url" placeholder="https://www.hl7.org/fhir/references.html" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" required>
-                                <button type="button" onclick="loadSampleFhirUrl()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-blue-300 transition whitespace-nowrap cursor-pointer">
-                                    Cargar Ejemplo (hl7.org/fhir/references.html)
-                                </button>
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-6">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">URL del Documento o Especificación HL7 FHIR:</label>
+                                <div class="flex gap-1.5">
+                                    <input id="import-mat-url" type="url" placeholder="https://www.hl7.org/fhir/references.html" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" required>
+                                    <button type="button" onclick="loadSampleFhirUrl()" title="Cargar URL de ejemplo" class="px-2.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-blue-300 transition whitespace-nowrap cursor-pointer">
+                                        Ejemplo
+                                    </button>
+                                </div>
                             </div>
-                            <p class="text-[11px] text-slate-400">Descarga, extrae el texto técnico e indexa automáticamente cualquier especificación o página web.</p>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                            <div class="md:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
                                 <select id="import-url-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título Personalizado (Opcional):</label>
-                                <input id="import-url-title" type="text" placeholder="Ej: HL7 FHIR R4 - References & Resolution" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                            <div class="md:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título (Opcional):</label>
+                                <input id="import-url-title" type="text" placeholder="Ej: FHIR References" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-3 pt-1">
-                            <button id="btn-import-url-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/30">
-                                📥 Descargar, Extraer e Indexar Contenido
-                            </button>
-                            <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
-                                <span class="animate-spin">⏳</span> Descargando y procesando la URL...
-                            </span>
+                        <div class="flex items-center justify-between gap-3 pt-1">
+                            <span class="text-[11px] text-slate-400">Extrae e indexa automáticamente el texto técnico de la página o PDF remoto.</span>
+                            <div class="flex items-center gap-3">
+                                <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                    <span class="animate-spin">⏳</span> Procesando URL...
+                                </span>
+                                <button id="btn-import-url-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/25">
+                                    📥 Importar URL
+                                </button>
+                            </div>
                         </div>
                     </form>
 
                     <!-- Mode 2: Local PDF Upload Form -->
                     <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="hidden space-y-4">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-5">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo PDF Local:</label>
+                                <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-rose-600 file:text-white hover:file:bg-rose-500 cursor-pointer">
+                            </div>
+                            <div class="md:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
                                 <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título / Capítulo:</label>
+                            <div class="md:col-span-4">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título / Capítulo (Opcional):</label>
                                 <input id="upload-title" type="text" placeholder="Ej: Módulo 2 - REST y Búsquedas" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo PDF Local:</label>
-                            <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer">
+                        <div class="flex items-center justify-between gap-3 pt-1">
+                            <span class="text-[11px] text-slate-400">Apache PDFBox conservará el PDF original y extraerá su texto para búsquedas.</span>
+                            <button type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-md shadow-rose-600/25">
+                                📄 Subir e Indexar PDF
+                            </button>
                         </div>
-
-                        <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition cursor-pointer">
-                            Procesar e Indexar con PDFBox
-                        </button>
                     </form>
 
                     <!-- Mode 3: Markdown Material Form -->
                     <form id="import-md-form" onsubmit="submitMarkdownMaterial(event)" class="hidden space-y-4">
-                        <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60 gap-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs font-semibold text-slate-400">Modo:</span>
+                        <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-2 rounded-xl border border-slate-700/60 gap-2">
+                            <div class="flex items-center gap-1.5">
                                 <button type="button" id="md-mode-file-btn" onclick="toggleMarkdownSubmode('file')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer">
-                                    📁 Subir Archivo .md
+                                    📁 Subir archivo .md
                                 </button>
                                 <button type="button" id="md-mode-text-btn" onclick="toggleMarkdownSubmode('text')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">
-                                    ✏️ Escribir / Pegar Markdown
+                                    ✏️ Editor Markdown
                                 </button>
                             </div>
-                            <button type="button" onclick="loadSampleMarkdown()" class="text-xs text-blue-400 hover:underline cursor-pointer">
-                                💡 Cargar Plantilla FHIR Markdown
+                            <button type="button" onclick="loadSampleMarkdown()" class="text-xs text-blue-400 hover:underline cursor-pointer px-2">
+                                💡 Cargar plantilla de ejemplo
                             </button>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Tema Asociado:</label>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
                                 <select id="import-md-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-400 mb-1">Título del Material:</label>
-                                <input id="import-md-title" type="text" placeholder="Ej: Apuntes Resumen - Recursos y Paradigmas FHIR R4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título del Material:</label>
+                                <input id="import-md-title" type="text" placeholder="Ej: Apuntes Resumen - Recursos FHIR R4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
                             </div>
                         </div>
 
                         <!-- Submode A: File Input -->
                         <div id="md-file-input-container">
-                            <label class="block text-xs font-semibold text-slate-400 mb-1">Archivo Markdown (.md, .markdown, .txt):</label>
-                            <input id="import-md-file" type="file" accept=".md,.markdown,.txt" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer">
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo Markdown (.md, .markdown, .txt):</label>
+                            <input id="import-md-file" type="file" accept=".md,.markdown,.txt" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
                         </div>
 
                         <!-- Submode B: Textarea Editor -->
                         <div id="md-text-input-container" class="hidden space-y-1">
-                            <label class="block text-xs font-semibold text-slate-400 mb-1">Editor / Contenido Markdown:</label>
-                            <textarea id="import-md-text" rows="8" placeholder="# Guía Rápida FHIR R4&#10;&#10;## Paradigma RESTful&#10;FHIR utiliza las operaciones estándar HTTP..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Contenido Markdown:</label>
+                            <textarea id="import-md-text" rows="6" placeholder="# Guía Rápida FHIR R4&#10;&#10;## Paradigma RESTful&#10;FHIR utiliza las operaciones estándar HTTP..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
                         </div>
 
-                        <div class="flex items-center gap-3 pt-1">
-                            <button id="btn-import-md-submit" type="submit" class="px-5 py-2.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/30">
-                                📝 Guardar e Indexar Markdown
-                            </button>
+                        <div class="flex items-center justify-end gap-3 pt-1">
                             <span id="import-md-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
-                                <span class="animate-spin">⏳</span> Guardando e indexando material...
+                                <span class="animate-spin">⏳</span> Guardando...
                             </span>
+                            <button id="btn-import-md-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/25">
+                                📝 Guardar Markdown
+                            </button>
                         </div>
                     </form>
                 </div>
 
-                <!-- Materials List & Search -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-5">
-                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-700/80 pb-5">
-                        <div>
-                            <h3 class="text-base font-bold text-white flex items-center gap-2">
-                                📑 Apuntes y Documentación Indexada
-                            </h3>
-                            <p class="text-xs text-slate-400 mt-1">Busca cualquier concepto técnico o clínico dentro del texto íntegro extraído de tus PDFs.</p>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                            <div class="relative flex-1 md:w-80">
-                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">🔍</span>
-                                <input id="mat-search-input" type="text" placeholder="Buscar en el texto de los PDFs..." oninput="filterMaterials()" class="w-full bg-slate-900 border border-slate-600 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-inner">
-                            </div>
-                            <select id="mat-topic-select" onchange="filterMaterials()" class="bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
-                                <option value="">Todos los Temas</option>
-                            </select>
-                        </div>
+                <!-- Unified Filter & Search Toolbar -->
+                <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                    <!-- Quick Format Filter Pills -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+                        <button type="button" id="mat-filter-ALL" onclick="filterMaterialsByType('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white transition cursor-pointer shrink-0">
+                            Todos
+                        </button>
+                        <button type="button" id="mat-filter-PDF" onclick="filterMaterialsByType('PDF')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                            <span>📄</span> PDFs
+                        </button>
+                        <button type="button" id="mat-filter-MARKDOWN" onclick="filterMaterialsByType('MARKDOWN')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                            <span>📝</span> Markdown
+                        </button>
+                        <button type="button" id="mat-filter-URL" onclick="filterMaterialsByType('URL')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                            <span>🌐</span> Web / URL
+                        </button>
                     </div>
-                    <div id="materials-container" class="space-y-4">
-                        <!-- Loaded dynamically -->
+
+                    <!-- Search + Topic Filter -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 lg:max-w-xl">
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
+                            <input id="mat-search-input" type="text" placeholder="Buscar por título, #ID o contenido del documento..." oninput="filterMaterials()" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <select id="mat-topic-select" onchange="filterMaterials()" class="bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 sm:max-w-[220px]">
+                            <option value="">Todos los Temas</option>
+                        </select>
                     </div>
+                </div>
+
+                <!-- Clean 2-Column Document Grid -->
+                <div id="materials-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Loaded dynamically -->
                 </div>
             </section>
         </main>
@@ -1365,15 +1397,21 @@
                         </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button id="pdf-viewer-btn-stats" onclick="openCurrentPdfStats()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 cursor-pointer">
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="pdf-viewer-btn-practice" onclick="openCurrentPdfPractice()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm">
+                        🎯 <span>Practicar</span>
+                    </button>
+                    <button id="pdf-viewer-btn-text" onclick="openCurrentPdfExtractedText()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer" title="Ver el texto plano extraído por PDFBox">
+                        📝 <span>Texto Extraído</span>
+                    </button>
+                    <button id="pdf-viewer-btn-stats" onclick="openCurrentPdfStats()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer">
                         📊 <span>Estadísticas</span>
                     </button>
-                    <button id="pdf-viewer-btn-tab" onclick="openCurrentPdfInTab()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition flex items-center gap-1.5 cursor-pointer">
-                        <span>Abrir en pestaña nueva</span> ↗
+                    <button id="pdf-viewer-btn-tab" onclick="openCurrentPdfInTab()" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer" title="Abrir PDF en pestaña nueva">
+                        <span>Pestaña</span> ↗
                     </button>
-                    <a id="pdf-viewer-btn-download" href="#" download class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer">
-                        <span>Descargar</span> ⬇
+                    <a id="pdf-viewer-btn-download" href="#" download class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer" title="Descargar archivo PDF">
+                        ⬇
                     </a>
                     <button onclick="closePdfViewer()" class="text-slate-400 hover:text-white text-xl font-bold p-1.5 ml-1 cursor-pointer">✕</button>
                 </div>
@@ -1669,6 +1707,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.11"></script>
+    <script src="/app.js?v=2.0.12"></script>
 </body>
 </html>
