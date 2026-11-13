@@ -3,7 +3,8 @@
     Inicia la aplicación FHIR Cert Master en Windows 11.
 .DESCRIPTION
     Comprueba si la aplicación ya está arrancada en el puerto configurado.
-    Permite configurar el puerto mediante 'app.conf' o mediante parámetro -Port.
+    Permite configurar el puerto y parámetros de seguridad mediante 'app.conf'
+    o variables de entorno (APP_ADMIN_USER, APP_ADMIN_PASSWORD, etc.).
     Verifica que el puerto esté libre y arranca el servicio en segundo plano,
     abriendo opcionalmente el navegador una vez el servidor responde.
 .PARAMETER Port
@@ -29,11 +30,17 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
-# 1. Cargar configuración desde app.conf
+# 1. Cargar configuración desde app.conf (las variables de entorno previas tienen prioridad si existen)
 $ConfigFile = Join-Path $ScriptDir "app.conf"
 $ConfigPort = 8080
 $ConfigOpenBrowser = $true
 $ConfigJvmMemory = "1024m"
+$ConfigAdminUser = if ($env:APP_ADMIN_USER) { $env:APP_ADMIN_USER } else { "admin" }
+$ConfigAdminPassword = if ($env:APP_ADMIN_PASSWORD) { $env:APP_ADMIN_PASSWORD } else { "" }
+$ConfigMaxFailedAttempts = if ($env:APP_MAX_FAILED_ATTEMPTS) { $env:APP_MAX_FAILED_ATTEMPTS } else { "5" }
+$ConfigLockDurationMinutes = if ($env:APP_LOCK_DURATION_MINUTES) { $env:APP_LOCK_DURATION_MINUTES } else { "15" }
+$ConfigCookieSecure = if ($env:APP_COOKIE_SECURE) { $env:APP_COOKIE_SECURE } else { "false" }
+$ConfigSelfRegistration = if ($env:APP_SELF_REGISTRATION) { $env:APP_SELF_REGISTRATION } else { "false" }
 
 if (Test-Path $ConfigFile) {
     Get-Content $ConfigFile -Encoding UTF8 | ForEach-Object {
@@ -54,6 +61,24 @@ if (Test-Path $ConfigFile) {
                 }
                 "JVM_MAX_MEMORY" {
                     if ($val) { $ConfigJvmMemory = $val }
+                }
+                "APP_ADMIN_USER" {
+                    if (-not $env:APP_ADMIN_USER -and $val) { $ConfigAdminUser = $val }
+                }
+                "APP_ADMIN_PASSWORD" {
+                    if (-not $env:APP_ADMIN_PASSWORD -and $val) { $ConfigAdminPassword = $val }
+                }
+                "APP_MAX_FAILED_ATTEMPTS" {
+                    if (-not $env:APP_MAX_FAILED_ATTEMPTS -and $val) { $ConfigMaxFailedAttempts = $val }
+                }
+                "APP_LOCK_DURATION_MINUTES" {
+                    if (-not $env:APP_LOCK_DURATION_MINUTES -and $val) { $ConfigLockDurationMinutes = $val }
+                }
+                "APP_COOKIE_SECURE" {
+                    if (-not $env:APP_COOKIE_SECURE -and $val) { $ConfigCookieSecure = $val }
+                }
+                "APP_SELF_REGISTRATION" {
+                    if (-not $env:APP_SELF_REGISTRATION -and $val) { $ConfigSelfRegistration = $val }
                 }
             }
         }
@@ -161,6 +186,8 @@ if (-not $JarPath -or -not (Test-Path $JarPath)) {
     Write-Host "Compilando con Maven..." -ForegroundColor Cyan
     $mvnCmd = Get-Command "mvn" -ErrorAction SilentlyContinue
     if ($mvnCmd) {
+        Remove-Item env:SPRING_CONFIG_LOCATION -ErrorAction SilentlyContinue
+        Remove-Item env:LOGGING_CONFIG -ErrorAction SilentlyContinue
         & mvn clean package -DskipTests
         $JarPath = (Resolve-Path (Join-Path $ScriptDir "target\fhir-exam-app-1.0.0.jar") -ErrorAction SilentlyContinue).Path
         if (-not $JarPath -or -not (Test-Path $JarPath)) {
@@ -174,7 +201,7 @@ if (-not $JarPath -or -not (Test-Path $JarPath)) {
     }
 }
 
-# 6. Preparar directorio de logs
+# 6. Preparar directorio de logs y variables de entorno
 $LogsDir = Join-Path $ScriptDir "logs"
 if (-not (Test-Path $LogsDir)) {
     New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
@@ -183,11 +210,28 @@ $StdoutLog = Join-Path $LogsDir "app.log"
 $StderrLog = Join-Path $LogsDir "app-error.log"
 
 Remove-Item env:SPRING_CONFIG_LOCATION -ErrorAction SilentlyContinue
+Remove-Item env:LOGGING_CONFIG -ErrorAction SilentlyContinue
+
+$env:APP_ADMIN_USER = $ConfigAdminUser
+$env:APP_ADMIN_PASSWORD = $ConfigAdminPassword
+$env:APP_MAX_FAILED_ATTEMPTS = $ConfigMaxFailedAttempts
+$env:APP_LOCK_DURATION_MINUTES = $ConfigLockDurationMinutes
+$env:APP_COOKIE_SECURE = $ConfigCookieSecure
+$env:APP_SELF_REGISTRATION = $ConfigSelfRegistration
+
+$SpringArgs = @(
+    "--server.port=$EffectivePort",
+    "--app.security.admin-username=$ConfigAdminUser",
+    "--app.security.max-failed-attempts=$ConfigMaxFailedAttempts",
+    "--app.security.lock-duration-minutes=$ConfigLockDurationMinutes",
+    "--app.security.cookie-secure=$ConfigCookieSecure",
+    "--app.security.self-registration=$ConfigSelfRegistration"
+)
 
 # 7. Modo Primer Plano (Foreground)
 if ($Foreground) {
     Write-Host "Iniciando FHIR Cert Master en primer plano en puerto $EffectivePort..." -ForegroundColor Green
-    & java "-Xmx$ConfigJvmMemory" -jar "$JarPath" "--server.port=$EffectivePort"
+    & java "-Xmx$ConfigJvmMemory" -jar "$JarPath" @SpringArgs
     exit 0
 }
 
@@ -200,13 +244,19 @@ Write-Host " INICIANDO FHIR CERT MASTER (Windows 11)" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host " * Puerto configurado: $EffectivePort" -ForegroundColor White
 Write-Host " * Memoria JVM:        $ConfigJvmMemory" -ForegroundColor White
+Write-Host " * Admin inicial:      $ConfigAdminUser" -ForegroundColor White
 Write-Host " * Lanzador:           $javaBinary" -ForegroundColor Gray
 Write-Host " * Registro de logs:   $StdoutLog" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Arrancando servicio en segundo plano..." -ForegroundColor Yellow
 
-$launchCmd = "`"$javaBinary`" -Xmx$ConfigJvmMemory -jar `"$JarPath`" --server.port=$EffectivePort"
-$wmiCmd = "cmd.exe /c `"$launchCmd > `"$StdoutLog`" 2> `"$StderrLog`"`""
+$springArgsJoined = ($SpringArgs | ForEach-Object { "`"$_`"" }) -join " "
+$envPrefix = "set `"SPRING_CONFIG_LOCATION=`" && set `"LOGGING_CONFIG=`" && set `"APP_ADMIN_USER=$ConfigAdminUser`" && "
+if ($ConfigAdminPassword) {
+    $envPrefix += "set `"APP_ADMIN_PASSWORD=$ConfigAdminPassword`" && "
+}
+$launchCmd = "`"$javaBinary`" -Xmx$ConfigJvmMemory -jar `"$JarPath`" $springArgsJoined"
+$wmiCmd = "cmd.exe /c `"$envPrefix$launchCmd > `"$StdoutLog`" 2> `"$StderrLog`"`""
 
 $res = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $wmiCmd; CurrentDirectory = $ScriptDir }
 $launcherPid = $res.ProcessId
@@ -227,7 +277,7 @@ while ((Get-Date) -lt $startTime.AddSeconds($timeoutSec)) {
         Set-Content -Path $PidFile -Value $realPid -Force
 
         try {
-            $resp = Invoke-WebRequest -Uri "http://localhost:$EffectivePort/api/topics" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
+            $resp = Invoke-WebRequest -Uri "http://localhost:$EffectivePort/" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
             if ($resp -and $resp.StatusCode -eq 200) {
                 $isReady = $true
                 break
@@ -249,6 +299,16 @@ if ($isReady) {
     Write-Host " * Puerto:      $EffectivePort" -ForegroundColor White
     Write-Host " * URL Local:   http://localhost:$EffectivePort" -ForegroundColor Green
     Write-Host " * Archivo log: $StdoutLog" -ForegroundColor Gray
+
+    if (Test-Path $StdoutLog) {
+        $logContent = Get-Content $StdoutLog -ErrorAction SilentlyContinue | Out-String
+        if ($logContent -match "CREDENCIALES INICIALES DE ADMINISTRADOR GENERADAS") {
+            Write-Host ""
+            Write-Host " [IMPORTANTE] Se ha generado una contrasena temporal de administrador." -ForegroundColor Yellow
+            Write-Host " Consulta ahora mismo las lineas de bootstrap en: $StdoutLog" -ForegroundColor Yellow
+        }
+    }
+
     Write-Host ""
     Write-Host " Acciones disponibles:" -ForegroundColor Gray
     Write-Host "   - Para detener:  .\stop.ps1   (o doble clic en stop.bat)" -ForegroundColor Gray
