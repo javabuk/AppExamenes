@@ -104,11 +104,12 @@ class MigrationAndBootstrapTest {
 
         JdbcTemplate copyJdbc = new JdbcTemplate(ds);
 
-        // Contar datos antes de migrar
+        // Contar datos antes de migrar (excluyendo posibles registros huérfanos preexistentes sin pregunta válida)
         Integer questionsBefore = copyJdbc.queryForObject("SELECT COUNT(*) FROM questions", Integer.class);
         Integer materialsBefore = copyJdbc.queryForObject("SELECT COUNT(*) FROM study_materials", Integer.class);
         Integer attemptsBefore = copyJdbc.queryForObject("SELECT COUNT(*) FROM exam_attempts", Integer.class);
-        Integer srsBefore = copyJdbc.queryForObject("SELECT COUNT(*) FROM question_srs_state", Integer.class);
+        Integer srsBefore = copyJdbc.queryForObject(
+                "SELECT COUNT(*) FROM question_srs_state s INNER JOIN questions q ON s.question_id = q.id", Integer.class);
 
         Flyway flyway = Flyway.configure()
                 .dataSource(ds)

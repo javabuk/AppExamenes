@@ -53,6 +53,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 
 -- 3. Recrear question_srs_state para soportar estado SM-2 por (user_id, question_id)
+-- Limpiar posibles registros huérfanos de question_srs_state cuya pregunta ya no exista en questions
+DELETE FROM question_srs_state WHERE question_id NOT IN (SELECT id FROM questions);
+
 CREATE TABLE question_srs_state_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -68,8 +71,9 @@ CREATE TABLE question_srs_state_new (
 INSERT INTO question_srs_state_new (
     user_id, question_id, consecutive_correct, easiness_factor, interval_days, next_review_date, updated_at
 )
-SELECT 1, question_id, consecutive_correct, easiness_factor, interval_days, next_review_date, datetime('now')
-FROM question_srs_state;
+SELECT 1, s.question_id, s.consecutive_correct, s.easiness_factor, s.interval_days, s.next_review_date, datetime('now')
+FROM question_srs_state s
+INNER JOIN questions q ON s.question_id = q.id;
 
 DROP TABLE question_srs_state;
 ALTER TABLE question_srs_state_new RENAME TO question_srs_state;
