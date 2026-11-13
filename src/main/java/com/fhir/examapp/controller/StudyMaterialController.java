@@ -12,7 +12,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/materials")
-@CrossOrigin(origins = "*")
 public class StudyMaterialController {
 
     private final StudyMaterialService studyMaterialService;

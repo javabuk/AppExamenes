@@ -9,7 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/topics")
-@CrossOrigin(origins = "*")
 public class TopicController {
 
     private final SyllabusTopicRepository topicRepository;

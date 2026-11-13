@@ -13,7 +13,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/exams")
-@CrossOrigin(origins = "*")
 public class ExamController {
 
     private final ExamEngineService examEngineService;

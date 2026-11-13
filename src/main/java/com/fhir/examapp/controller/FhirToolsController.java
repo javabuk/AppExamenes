@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/fhir")
-@CrossOrigin(origins = "*")
 public class FhirToolsController {
 
     private final FhirValidationService fhirValidationService;

@@ -11,7 +11,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/srs")
-@CrossOrigin(origins = "*")
 public class SrsController {
 
     private final SpacedRepetitionService srsService;
