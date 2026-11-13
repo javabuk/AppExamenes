@@ -17,6 +17,11 @@ public class StudyCardComment {
     @JoinColumn(name = "material_id", nullable = false)
     private StudyMaterial material;
 
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     @Column(name = "card_index", nullable = false)
     private Integer cardIndex;
 
@@ -42,15 +47,28 @@ public class StudyCardComment {
         this.createdAt = createdAt;
     }
 
+    public StudyCardComment(StudyMaterial material, User user, Integer cardIndex, String cardHeading, String contentMarkdown, String createdAt) {
+        this(material, cardIndex, cardHeading, contentMarkdown, createdAt);
+        this.user = user;
+    }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
     public StudyMaterial getMaterial() { return material; }
     public void setMaterial(StudyMaterial material) { this.material = material; }
 
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
     @JsonProperty("materialId")
     public Long resolveMaterialId() {
         return material != null ? material.getId() : null;
+    }
+
+    @JsonProperty("userId")
+    public Long resolveUserId() {
+        return user != null ? user.getId() : null;
     }
 
     public Integer getCardIndex() { return cardIndex; }

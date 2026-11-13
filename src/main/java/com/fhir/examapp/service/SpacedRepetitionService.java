@@ -67,6 +67,7 @@ public class SpacedRepetitionService {
         state.setEasinessFactor(Math.round(ef * 100.0) / 100.0);
         state.setIntervalDays(interval);
         state.setNextReviewDate(LocalDate.now().plusDays(interval));
+        state.setUpdatedAt(com.fhir.examapp.domain.User.formatNow());
 
         return srsStateRepository.save(state);
     }
@@ -75,9 +76,14 @@ public class SpacedRepetitionService {
      * Actualiza el estado SM-2 automáticamente cuando una pregunta es contestada en un examen.
      */
     public void recordAnswerResult(Question question, boolean correct) {
-        QuestionSrsState state = srsStateRepository.findById(question.getId())
+        recordAnswerResult(1L, question, correct);
+    }
+
+    public void recordAnswerResult(Long userId, Question question, boolean correct) {
+        Long resolvedUserId = userId != null ? userId : 1L;
+        QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
-                    QuestionSrsState newState = new QuestionSrsState(question.getId());
+                    QuestionSrsState newState = new QuestionSrsState(resolvedUserId, question.getId());
                     return srsStateRepository.save(newState);
                 });
 
@@ -89,12 +95,17 @@ public class SpacedRepetitionService {
      * Registra una valoración manual desde el modo Flashcard.
      */
     public QuestionSrsState recordManualReview(Long questionId, int rating) {
+        return recordManualReview(1L, questionId, rating);
+    }
+
+    public QuestionSrsState recordManualReview(Long userId, Long questionId, int rating) {
+        Long resolvedUserId = userId != null ? userId : 1L;
         Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + questionId));
 
-        QuestionSrsState state = srsStateRepository.findById(questionId)
+        QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
-                    QuestionSrsState newState = new QuestionSrsState(questionId);
+                    QuestionSrsState newState = new QuestionSrsState(resolvedUserId, questionId);
                     return srsStateRepository.save(newState);
                 });
 
@@ -131,8 +142,14 @@ public class SpacedRepetitionService {
     }
 
     public void ensureSrsState(Question question) {
-        if (question != null && question.getId() != null && !srsStateRepository.existsById(question.getId())) {
-            QuestionSrsState state = new QuestionSrsState(question.getId());
+        ensureSrsState(1L, question);
+    }
+
+    public void ensureSrsState(Long userId, Question question) {
+        Long resolvedUserId = userId != null ? userId : 1L;
+        if (question != null && question.getId() != null
+                && !srsStateRepository.existsByUserIdAndQuestionId(resolvedUserId, question.getId())) {
+            QuestionSrsState state = new QuestionSrsState(resolvedUserId, question.getId());
             srsStateRepository.save(state);
         }
     }

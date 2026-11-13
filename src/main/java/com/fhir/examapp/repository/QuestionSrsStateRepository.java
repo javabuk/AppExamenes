@@ -7,9 +7,25 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface QuestionSrsStateRepository extends JpaRepository<QuestionSrsState, Long> {
+
+    Optional<QuestionSrsState> findByUserIdAndQuestionId(Long userId, Long questionId);
+
+    boolean existsByUserIdAndQuestionId(Long userId, Long questionId);
+
+    List<QuestionSrsState> findByUserId(Long userId);
+
+    @Query("SELECT s FROM QuestionSrsState s WHERE s.userId = :userId AND s.nextReviewDate <= :today ORDER BY s.nextReviewDate ASC")
+    List<QuestionSrsState> findDueSrsStatesByUserId(@Param("userId") Long userId, @Param("today") String today);
+
+    @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.nextReviewDate <= :today")
+    long countDueReviewsByUserId(@Param("userId") Long userId, @Param("today") String today);
+
+    @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.consecutiveCorrect >= 2")
+    long countMasteredQuestionsByUserId(@Param("userId") Long userId);
 
     @Query("SELECT s FROM QuestionSrsState s WHERE s.nextReviewDate <= :today ORDER BY s.nextReviewDate ASC")
     List<QuestionSrsState> findDueSrsStates(@Param("today") String today);

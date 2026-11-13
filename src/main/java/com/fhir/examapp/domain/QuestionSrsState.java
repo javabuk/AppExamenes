@@ -1,15 +1,24 @@
 package com.fhir.examapp.domain;
 
 import jakarta.persistence.*;
-import org.springframework.data.domain.Persistable;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Entity
 @Table(name = "question_srs_state")
-public class QuestionSrsState implements Persistable<Long> {
+public class QuestionSrsState {
+
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Id
-    @Column(name = "question_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId = 1L;
+
+    @Column(name = "question_id", nullable = false)
     private Long questionId;
 
     @Column(name = "consecutive_correct")
@@ -24,41 +33,38 @@ public class QuestionSrsState implements Persistable<Long> {
     @Column(name = "next_review_date")
     private String nextReviewDate;
 
-    @Transient
-    private boolean isNew = false;
+    @Column(name = "updated_at")
+    private String updatedAt;
 
-    public QuestionSrsState() {
-        this.isNew = false;
-    }
+    public QuestionSrsState() {}
 
     public QuestionSrsState(Long questionId) {
+        this(1L, questionId);
+    }
+
+    public QuestionSrsState(Long userId, Long questionId) {
+        this.userId = userId != null ? userId : 1L;
         this.questionId = questionId;
         this.consecutiveCorrect = 0;
         this.easinessFactor = 2.5;
         this.intervalDays = 1;
         this.nextReviewDate = LocalDate.now().toString();
-        this.isNew = true;
+        this.updatedAt = LocalDateTime.now().format(FORMATTER);
     }
 
     public QuestionSrsState(Question question) {
-        this(question != null ? question.getId() : null);
+        this(1L, question != null ? question.getId() : null);
     }
 
-    @Override
-    public Long getId() {
-        return questionId;
+    public QuestionSrsState(Long userId, Question question) {
+        this(userId, question != null ? question.getId() : null);
     }
 
-    @Override
-    public boolean isNew() {
-        return isNew;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    @PostLoad
-    @PostPersist
-    void markNotNew() {
-        this.isNew = false;
-    }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
 
     public Long getQuestionId() { return questionId; }
     public void setQuestionId(Long questionId) { this.questionId = questionId; }
@@ -72,7 +78,7 @@ public class QuestionSrsState implements Persistable<Long> {
     public Integer getIntervalDays() { return intervalDays; }
     public void setIntervalDays(Integer intervalDays) { this.intervalDays = intervalDays; }
 
-    public LocalDate getNextReviewDate() { 
+    public LocalDate getNextReviewDate() {
         if (nextReviewDate == null || nextReviewDate.trim().isEmpty()) return null;
         try {
             if (nextReviewDate.contains(" ")) {
@@ -84,10 +90,13 @@ public class QuestionSrsState implements Persistable<Long> {
         }
     }
 
-    public void setNextReviewDate(LocalDate nextReviewDate) { 
-        this.nextReviewDate = nextReviewDate != null ? nextReviewDate.toString() : null; 
+    public void setNextReviewDate(LocalDate nextReviewDate) {
+        this.nextReviewDate = nextReviewDate != null ? nextReviewDate.toString() : null;
     }
 
     public String getNextReviewDateString() { return nextReviewDate; }
     public void setNextReviewDateString(String nextReviewDate) { this.nextReviewDate = nextReviewDate; }
+
+    public String getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
 }

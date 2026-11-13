@@ -1,13 +1,23 @@
 server:
   port: 8080
+  servlet:
+    session:
+      timeout: 8h
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${APP_COOKIE_SECURE:false}
 
 spring:
   application:
     name: fhir-exam-app
 
   datasource:
-    url: jdbc:sqlite:./data/fhir_exam.db
+    url: jdbc:sqlite:./data/fhir_exam.db?busy_timeout=10000&journal_mode=WAL&foreign_keys=on
     driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 5
+      connection-init-sql: PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 10000;
 
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
@@ -28,6 +38,15 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
+
+app:
+  security:
+    self-registration: ${APP_SELF_REGISTRATION:false}
+    max-failed-attempts: ${APP_MAX_FAILED_ATTEMPTS:5}
+    lock-duration-minutes: ${APP_LOCK_DURATION_MINUTES:15}
+    cookie-secure: ${APP_COOKIE_SECURE:false}
+    admin-user: ${APP_ADMIN_USER:}
+    admin-password: ${APP_ADMIN_PASSWORD:}
 
 logging:
   config: classpath:logback.xml

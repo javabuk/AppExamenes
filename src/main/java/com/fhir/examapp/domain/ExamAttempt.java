@@ -1,5 +1,7 @@
 package com.fhir.examapp.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -15,6 +17,11 @@ public class ExamAttempt {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
 
     @Column(nullable = false)
     private String mode; // 'SIMULATION', 'ADAPTIVE', 'TUTOR', 'ERRORS'
@@ -42,6 +49,11 @@ public class ExamAttempt {
         this.startedAt = LocalDateTime.now().format(FORMATTER);
     }
 
+    public ExamAttempt(String mode, User user) {
+        this(mode);
+        this.user = user;
+    }
+
     public void addAnswer(ExamAttemptAnswer answer) {
         answers.add(answer);
         answer.setAttempt(this);
@@ -49,6 +61,14 @@ public class ExamAttempt {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    @JsonProperty("userId")
+    public Long resolveUserId() {
+        return user != null ? user.getId() : null;
+    }
 
     public String getMode() { return mode; }
     public void setMode(String mode) { this.mode = mode; }

@@ -461,7 +461,6 @@ public class StudyMaterialService {
         }
     }
 
-    @jakarta.annotation.PostConstruct
     public void ensureDefaultStudyCardsDeck() {
         try {
             List<StudyMaterial> existing = studyMaterialRepository.findAll();
