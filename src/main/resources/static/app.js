@@ -198,7 +198,11 @@ function setupModalInteractions() {
 }
 
 // =================== NAVEGACIÓN POR PESTAÑAS (VIEW TRANSITIONS) ===================
-function switchTab(tabId) {
+function openMaterialsSection(subview = 'docs') {
+    switchTab('materials', subview);
+}
+
+function switchTab(tabId, materialSubview = null) {
     const views = [
         'dashboard', 'exam-modes', 'exam-runner', 'exam-result',
         'search-builder', 'resource-inspector', 'flashcards',
@@ -211,6 +215,8 @@ function switchTab(tabId) {
         const btn = document.getElementById(`btn-tab-${v}`);
         if (btn) btn.classList.remove('active');
     });
+    const cardsSidebarBtn = document.getElementById('btn-tab-study-cards');
+    if (cardsSidebarBtn) cardsSidebarBtn.classList.remove('active');
 
     const activeView = document.getElementById(`view-${tabId}`);
     if (activeView) {
@@ -221,14 +227,25 @@ function switchTab(tabId) {
         activeView.classList.add('view-enter');
     }
 
-    const activeBtn = document.getElementById(`btn-tab-${tabId}`);
-    if (activeBtn) activeBtn.classList.add('active');
+    if (tabId === 'materials') {
+        const targetSub = materialSubview || activeMaterialSubview || 'docs';
+        switchMaterialSubview(targetSub);
+        if (targetSub === 'cards' && cardsSidebarBtn) {
+            cardsSidebarBtn.classList.add('active');
+        } else {
+            const activeBtn = document.getElementById('btn-tab-materials');
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+        loadMaterials();
+    } else {
+        const activeBtn = document.getElementById(`btn-tab-${tabId}`);
+        if (activeBtn) activeBtn.classList.add('active');
+    }
 
     // Acciones específicas por pestaña
     if (tabId === 'dashboard') loadDashboard();
     if (tabId === 'flashcards') loadFlashcards();
     if (tabId === 'questions') loadQuestions();
-    if (tabId === 'materials') loadMaterials();
 }
 
 // =================== TEMAS DEL TEMARIO ===================
@@ -245,13 +262,26 @@ async function loadTopics() {
 }
 
 function populateTopicSelects() {
-    const selects = ['modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id', 'import-json-topic-id'];
+    const selects = [
+        'modal-topic-id', 'q-topic-select', 'upload-topic-id', 'new-q-topic-id',
+        'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id',
+        'import-json-topic-id', 'import-cards-topic-id'
+    ];
     selects.forEach(selectId => {
         const el = document.getElementById(selectId);
         if (!el) return;
         const firstOption = el.options[0];
         el.innerHTML = '';
-        if (firstOption && selectId !== 'upload-topic-id' && selectId !== 'new-q-topic-id' && selectId !== 'import-url-topic-id' && selectId !== 'import-md-topic-id') el.appendChild(firstOption);
+        if (
+            firstOption &&
+            selectId !== 'upload-topic-id' &&
+            selectId !== 'new-q-topic-id' &&
+            selectId !== 'import-url-topic-id' &&
+            selectId !== 'import-md-topic-id' &&
+            selectId !== 'import-cards-topic-id'
+        ) {
+            el.appendChild(firstOption);
+        }
 
         allTopics.forEach(t => {
             const opt = document.createElement('option');
@@ -1214,6 +1244,9 @@ async function loadMaterials() {
             allMaterials = await resp.json();
             filterMaterials();
             populateMaterialSelects();
+            if (typeof renderStudyCardsSection === 'function') {
+                renderStudyCardsSection();
+            }
         }
     } catch (e) {
         console.error('Error cargando materiales:', e);
@@ -1240,8 +1273,17 @@ function populateMaterialSelects() {
 }
 
 let activeMaterialTypeFilter = 'ALL';
+let activeMaterialSubview = 'docs';
+
+function isStudyCardsMaterial(m) {
+    if (!m) return false;
+    if (m.sourceType === 'STUDY_CARDS') return true;
+    const text = m.contentText || '';
+    return text.includes('### Ficha');
+}
 
 function getMaterialKind(m) {
+    if (isStudyCardsMaterial(m)) return 'STUDY_CARDS';
     const isMarkdown = m.sourceType === 'MARKDOWN' || (m.filePath && m.filePath.toLowerCase().endsWith('.md')) || (m.referenceUrlOrPage && m.referenceUrlOrPage.toLowerCase().endsWith('.md'));
     if (isMarkdown) return 'MARKDOWN';
     const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
@@ -1264,18 +1306,18 @@ function toggleMaterialUploadDrawer(forceState) {
         drawer.classList.remove('hidden');
         if (icon) icon.textContent = '✕';
         if (label) label.textContent = 'Cerrar Panel';
-        if (btn) btn.className = 'px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition flex items-center justify-center gap-2 cursor-pointer shrink-0';
+        if (btn) btn.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition flex items-center justify-center gap-2 cursor-pointer shrink-0';
     } else {
         drawer.classList.add('hidden');
         if (icon) icon.textContent = '＋';
-        if (label) label.textContent = 'Añadir Material';
-        if (btn) btn.className = 'px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0';
+        if (label) label.textContent = 'Añadir Documento';
+        if (btn) btn.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0';
     }
 }
 
 function filterMaterialsByType(type) {
     activeMaterialTypeFilter = type || 'ALL';
-    const types = ['ALL', 'PDF', 'MARKDOWN', 'URL'];
+    const types = ['ALL', 'PDF', 'MARKDOWN', 'URL', 'STUDY_CARDS'];
     types.forEach(t => {
         const btn = document.getElementById(`mat-filter-${t}`);
         if (!btn) return;
@@ -1312,6 +1354,10 @@ function filterMaterials() {
 function openPrimaryMaterialView(id) {
     const m = allMaterials.find(item => item.id === id);
     if (!m) return;
+    if (getMaterialKind(m) === 'STUDY_CARDS') {
+        openStudyCardDeckInPresentation(m.id);
+        return;
+    }
     const hasPdfFile = Boolean(m.filePath && m.filePath.toLowerCase().endsWith('.pdf'));
     if (hasPdfFile) {
         openPdfViewer(m.id);
@@ -1327,17 +1373,21 @@ function renderMaterials(list) {
 
     const countBadge = document.getElementById('mat-total-count-badge');
     if (countBadge) {
-        countBadge.textContent = list.length === allMaterials.length
-            ? `${allMaterials.length} docs`
-            : `${list.length} de ${allMaterials.length} docs`;
+        countBadge.textContent = `${allMaterials.length}`;
     }
+
+    const cardsList = allMaterials.filter(m => isStudyCardsMaterial(m));
+    const cardsBadge = document.getElementById('mat-cards-count-badge');
+    if (cardsBadge) cardsBadge.textContent = `${cardsList.length}`;
+    const sidebarCardsBadge = document.getElementById('badge-sidebar-cards-count');
+    if (sidebarCardsBadge) sidebarCardsBadge.textContent = `${cardsList.length}`;
 
     if (list.length === 0) {
         container.innerHTML = `
             <div class="lg:col-span-2 p-10 rounded-2xl bg-slate-900/50 border border-slate-800 text-center space-y-3">
                 <div class="w-12 h-12 mx-auto rounded-2xl bg-slate-800/80 flex items-center justify-center text-xl">📑</div>
                 <h4 class="text-sm font-bold text-white">No se encontraron materiales</h4>
-                <p class="text-xs text-slate-400 max-w-md mx-auto">No hay apuntes ni documentos que coincidan con la búsqueda actual. Prueba a cambiar los filtros o pulsa <strong>"＋ Añadir Material"</strong> arriba a la derecha.</p>
+                <p class="text-xs text-slate-400 max-w-md mx-auto">No hay apuntes ni documentos que coincidan con la búsqueda actual. Prueba a cambiar los filtros o pulsa <strong>"＋ Añadir Documento"</strong> arriba a la derecha.</p>
             </div>
         `;
         return;
@@ -1365,7 +1415,12 @@ function renderMaterials(list) {
         let typeLabel = 'DOC';
         let primaryReadLabel = '📖 Leer Texto';
 
-        if (kind === 'MARKDOWN') {
+        if (kind === 'STUDY_CARDS') {
+            typeIcon = '🗂️';
+            typeBadgeClass = 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30';
+            typeLabel = 'FICHAS';
+            primaryReadLabel = '🗂️ Ver Presentación';
+        } else if (kind === 'MARKDOWN') {
             typeIcon = '📝';
             typeBadgeClass = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
             typeLabel = 'MARKDOWN';
@@ -1390,7 +1445,7 @@ function renderMaterials(list) {
                     ↗
                 </a>
             `;
-        } else if (m.filePath || kind === 'MARKDOWN') {
+        } else if (m.filePath || kind === 'MARKDOWN' || kind === 'STUDY_CARDS') {
             utilityBtnHtml = `
                 <a href="/api/materials/${m.id}/file?download=true" download title="Descargar archivo original" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-slate-700 text-slate-400 hover:text-emerald-300 border border-slate-700/70 flex items-center justify-center text-xs transition cursor-pointer">
                     ⬇
@@ -2802,4 +2857,1637 @@ function renderFallbackSvgChart(evolution) {
 
     svgContainer.innerHTML = svgHtml;
 }
+
+// =================== FICHAS DE APRENDIZAJE (PRESENTACIÓN INTERACTIVA & ADJUNTAR PREGUNTAS) ===================
+let activeStudyCardDeckId = null;
+let activeStudyCardParsedDeck = null;
+let activeStudyCardSlideIndex = 0;
+let isStudyCardsUploadOpen = false;
+let activeStudyCardsInputSubmode = 'text';
+let isStudyCardsFocusMode = false;
+
+let activeAttachQuestionsDeckId = null;
+let activeAttachQuestionsTab = 'linked';
+let selectedBankQuestionIds = new Set();
+
+const SAMPLE_STUDY_CARDS_MARKDOWN = `---
+
+## 1. La idea general
+
+### Ficha 1 · ¿De qué trata esta página?
+**Respuesta:** Explica las **5 formas** que hay de mover datos con FHIR.
+💡 Es como elegir transporte: tren, avión, coche… Cada uno sirve mejor según el viaje.
+
+Las cinco formas:
+1. **API REST**
+2. **Mensajes** (*Messaging*)
+3. **Documentos** (*Documents*)
+4. **Servicios** (*Services / SOA*)
+5. **Base de datos** (*Persistent store*)
+
+### Ficha 2 · ¿Hay que elegir solo una?
+**Respuesta:** **No.** Se pueden usar varias a la vez. La mejor depende de **cómo está montado tu sistema**.
+⚠️ Ninguna "arregla" los defectos de otra. Mensajes no sustituye a REST ni REST a mensajes: son distintas.
+
+### Ficha 3 · Resumen en una tabla
+| Forma | Se parece a… | Se usa cuando… |
+|---|---|---|
+| REST | Ir a una ventanilla y pedir o dejar datos al momento | Quieres consultar o guardar datos concretos |
+| Mensajes | Enviar una carta a otra organización | Las organizaciones casi no comparten procesos |
+| Documentos | Enviar un informe cerrado y firmado | Quieres que lo lea una persona tal cual se emitió |
+| Servicios | Una empresa con departamentos que se piden cosas | Tu arquitectura es por servicios |
+| Base de datos | El archivador donde guardas todo | Quieres guardar los datos ya en formato FHIR |
+
+---
+
+## 2. API REST
+
+### Ficha 4 · ¿Qué es?
+**Respuesta:** Una forma de hablar entre un **cliente** y un **servidor**. El cliente puede **crear, leer, modificar, borrar, buscar y ejecutar operaciones**.
+💡 Sirve para **enviar** datos (*push*) y para **pedirlos** (*pull*).
+
+### Ficha 5 · ¿Qué más incluye?
+**Respuesta:** Permite trabajo **asíncrono** (pides algo y la respuesta llega después) y consultas con **GraphQL**.
+
+### Ficha 6 · 🧩 Caso de uso: la app del paciente
+*Una app móvil muestra al paciente sus alergias.*
+**Respuesta:** **REST.** La app pregunta "dame las alergias del paciente 123" y el servidor contesta al momento.
+Se suele añadir **SMART App Launch** para controlar quién entra.
+
+### Ficha 7 · 🧩 Caso de uso: dos sistemas que ya se conocen
+*Dos hospitales de la misma red, con acuerdos firmados, comparten datos.*
+**Respuesta:** **REST.** La página dice que va bien cuando ya hay **acuerdos de gobernanza** (reglas pactadas entre los participantes).
+
+---
+
+## 3. Mensajes (*Messaging*)
+
+### Ficha 8 · ¿Qué es?
+**Respuesta:** Enviar **mensajes** de un sistema a otro, que se encaminan hasta su destino.
+💡 Como mandar una carta: tú envías, no necesitas ir a la ventanilla del otro.
+Puede funcionar **encima de REST** o con otra tecnología de mensajería.
+
+### Ficha 9 · 🎯 ¿Cuándo es buena idea?
+**Respuesta:** Cuando se intercambia entre **organizaciones muy distintas** que **casi no comparten procesos**.
+Frase de la página: puede ser *"más adecuado para el intercambio entre organizaciones dispares con bajo nivel de integración de procesos"*.
+
+### Ficha 10 · 🧩 Caso de uso: laboratorio externo
+*Un laboratorio de otra empresa avisa a varios hospitales de que hay un resultado. Cada hospital usa un sistema diferente.*
+**Respuesta:** **Mensajes.** El laboratorio envía el mensaje y no necesita conocer cómo funciona cada hospital por dentro.
+
+### Ficha 11 · 🧩 Para ti: HL7 v2 y HealthConnect
+*Tú ya mueves ADT u ORU con un motor de integración.*
+**Respuesta:** Los mensajes de FHIR son **parecidos en idea**: un evento sale de un sistema y llega a otros. Es la forma más cercana a lo que ya conoces de HL7 v2.
+
+---`;
+
+function switchMaterialSubview(subview) {
+    activeMaterialSubview = subview === 'cards' ? 'cards' : 'docs';
+
+    const docsSubview = document.getElementById('mat-subview-docs');
+    const cardsSubview = document.getElementById('mat-subview-cards');
+    const docsActions = document.getElementById('mat-top-actions-docs');
+    const cardsActions = document.getElementById('mat-top-actions-cards');
+    const docsBtn = document.getElementById('btn-mat-subview-docs');
+    const cardsBtn = document.getElementById('btn-mat-subview-cards');
+
+    const sidebarMatBtn = document.getElementById('btn-tab-materials');
+    const sidebarCardsBtn = document.getElementById('btn-tab-study-cards');
+
+    if (activeMaterialSubview === 'cards') {
+        if (docsSubview) docsSubview.classList.add('hidden');
+        if (cardsSubview) cardsSubview.classList.remove('hidden');
+        if (docsActions) docsActions.classList.add('hidden');
+        if (cardsActions) cardsActions.classList.remove('hidden');
+
+        if (cardsBtn) {
+            cardsBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold transition bg-amber-500 text-slate-950 shadow-sm cursor-pointer flex items-center space-x-2';
+        }
+        if (docsBtn) {
+            docsBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white cursor-pointer flex items-center space-x-2';
+        }
+
+        const viewMat = document.getElementById('view-materials');
+        if (viewMat && !viewMat.classList.contains('hidden')) {
+            if (sidebarMatBtn) sidebarMatBtn.classList.remove('active');
+            if (sidebarCardsBtn) sidebarCardsBtn.classList.add('active');
+        }
+
+        renderStudyCardsSection();
+    } else {
+        if (cardsSubview) cardsSubview.classList.add('hidden');
+        if (docsSubview) docsSubview.classList.remove('hidden');
+        if (cardsActions) cardsActions.classList.add('hidden');
+        if (docsActions) docsActions.classList.remove('hidden');
+
+        if (docsBtn) {
+            docsBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold transition bg-blue-600 text-white shadow-sm cursor-pointer flex items-center space-x-2';
+        }
+        if (cardsBtn) {
+            cardsBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white cursor-pointer flex items-center space-x-2';
+        }
+
+        const viewMat = document.getElementById('view-materials');
+        if (viewMat && !viewMat.classList.contains('hidden')) {
+            if (sidebarCardsBtn) sidebarCardsBtn.classList.remove('active');
+            if (sidebarMatBtn) sidebarMatBtn.classList.add('active');
+        }
+    }
+}
+
+function openStudyCardDeckInPresentation(id) {
+    activeStudyCardDeckId = id;
+    switchMaterialSubview('cards');
+    selectStudyCardDeck(id);
+}
+
+function toggleStudyCardsUploadDrawer(forceState) {
+    const drawer = document.getElementById('cards-upload-drawer');
+    const icon = document.getElementById('btn-toggle-cards-upload-icon');
+    const label = document.getElementById('btn-toggle-cards-upload-label');
+    if (!drawer) return;
+
+    isStudyCardsUploadOpen = typeof forceState === 'boolean' ? forceState : !isStudyCardsUploadOpen;
+
+    if (isStudyCardsUploadOpen) {
+        drawer.classList.remove('hidden');
+        if (icon) icon.textContent = '✕';
+        if (label) label.textContent = 'Cerrar formulario';
+        const titleInput = document.getElementById('import-cards-title');
+        if (titleInput) setTimeout(() => titleInput.focus(), 80);
+    } else {
+        drawer.classList.add('hidden');
+        if (icon) icon.textContent = '➕';
+        if (label) label.textContent = 'Cargar Nuevas Fichas (.md)';
+    }
+}
+
+function toggleStudyCardsInputSubmode(submode) {
+    activeStudyCardsInputSubmode = submode === 'file' ? 'file' : 'text';
+    const textContainer = document.getElementById('cards-text-input-container');
+    const fileContainer = document.getElementById('cards-file-input-container');
+    const textBtn = document.getElementById('cards-mode-text-btn');
+    const fileBtn = document.getElementById('cards-mode-file-btn');
+
+    if (activeStudyCardsInputSubmode === 'file') {
+        if (textContainer) textContainer.classList.add('hidden');
+        if (fileContainer) fileContainer.classList.remove('hidden');
+        if (fileBtn) fileBtn.className = 'px-3 py-1 rounded-md text-xs font-semibold bg-amber-500 text-slate-950 transition cursor-pointer';
+        if (textBtn) textBtn.className = 'px-3 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer';
+    } else {
+        if (fileContainer) fileContainer.classList.add('hidden');
+        if (textContainer) textContainer.classList.remove('hidden');
+        if (textBtn) textBtn.className = 'px-3 py-1 rounded-md text-xs font-semibold bg-amber-500 text-slate-950 transition cursor-pointer';
+        if (fileBtn) fileBtn.className = 'px-3 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer';
+        updateStudyCardsLiveCount();
+    }
+}
+
+function loadSampleStudyCardsMarkdown() {
+    toggleStudyCardsInputSubmode('text');
+    const titleInput = document.getElementById('import-cards-title');
+    const textArea = document.getElementById('import-cards-text');
+    if (titleInput && !titleInput.value.trim()) {
+        titleInput.value = '5 Formas de Mover Datos con FHIR (Paradigmas)';
+    }
+    if (textArea) {
+        textArea.value = SAMPLE_STUDY_CARDS_MARKDOWN;
+    }
+    updateStudyCardsLiveCount();
+    showToast('Ejemplo de 11 fichas cargado en el editor.', 'info');
+}
+
+function updateStudyCardsLiveCount() {
+    const textArea = document.getElementById('import-cards-text');
+    const badge = document.getElementById('cards-live-preview-badge');
+    if (!badge) return;
+    const raw = textArea ? textArea.value : '';
+    const parsed = parseStudyCardsMarkdown(raw);
+    badge.textContent = `${parsed.chapters.length} capítulo${parsed.chapters.length === 1 ? '' : 's'} · ${parsed.cards.length} ficha${parsed.cards.length === 1 ? '' : 's'} detectada${parsed.cards.length === 1 ? '' : 's'}`;
+}
+
+function previewStudyCardsFile(event) {
+    const fileInput = event.target;
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    if (!file) return;
+
+    const titleInput = document.getElementById('import-cards-title');
+    if (titleInput && !titleInput.value.trim()) {
+        titleInput.value = file.name.replace(/\.(md|markdown|txt)$/i, '');
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const content = e.target.result || '';
+        const parsed = parseStudyCardsMarkdown(content);
+        const badge = document.getElementById('cards-live-preview-badge');
+        if (badge) {
+            badge.textContent = `${parsed.chapters.length} capítulo${parsed.chapters.length === 1 ? '' : 's'} · ${parsed.cards.length} ficha${parsed.cards.length === 1 ? '' : 's'} en archivo`;
+        }
+    };
+    reader.readAsText(file);
+}
+
+async function submitStudyCardsMaterial(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const titleEl = document.getElementById('import-cards-title');
+    const topicEl = document.getElementById('import-cards-topic-id') || document.getElementById('import-cards-topic');
+    const statusEl = document.getElementById('import-cards-status');
+    const submitBtn = document.getElementById('btn-import-cards-submit');
+
+    const title = titleEl ? titleEl.value.trim() : '';
+    const topicId = topicEl ? topicEl.value : '';
+
+    if (!title) {
+        showToast('Indica un título para la colección de fichas.', 'error');
+        return;
+    }
+
+    if (statusEl) statusEl.classList.remove('hidden');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+        let resp;
+        if (activeStudyCardsInputSubmode === 'file') {
+            const fileInput = document.getElementById('import-cards-file');
+            if (!fileInput || !fileInput.files.length) {
+                showToast('Selecciona un archivo Markdown (.md).', 'error');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('file', fileInput.files[0]);
+            formData.append('sourceType', 'STUDY_CARDS');
+            if (topicId) formData.append('topicId', topicId);
+
+            resp = await fetch('/api/materials/markdown/file', {
+                method: 'POST',
+                body: formData
+            });
+        } else {
+            const textEl = document.getElementById('import-cards-text');
+            const contentText = textEl ? textEl.value : '';
+            if (!contentText || !contentText.trim()) {
+                showToast('Pega el contenido Markdown de las fichas.', 'error');
+                return;
+            }
+            const parsed = parseStudyCardsMarkdown(contentText);
+            if (parsed.cards.length === 0) {
+                showToast('No se detectaron fichas con formato ### Título. Revisa que los títulos de cada ficha empiecen con ###.', 'error');
+                return;
+            }
+            resp = await fetch('/api/materials/markdown/text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    contentText,
+                    topicId: topicId ? Number(topicId) : null,
+                    sourceType: 'STUDY_CARDS'
+                })
+            });
+        }
+
+        if (resp && resp.ok) {
+            const created = await resp.json();
+            if (titleEl) titleEl.value = '';
+            const textEl = document.getElementById('import-cards-text');
+            if (textEl) textEl.value = '';
+            const fileEl = document.getElementById('import-cards-file');
+            if (fileEl) fileEl.value = '';
+            updateStudyCardsLiveCount();
+
+            toggleStudyCardsUploadDrawer(false);
+            activeStudyCardDeckId = created.id;
+            await loadMaterials();
+            selectStudyCardDeck(created.id);
+            showToast(`¡Colección "${created.title}" cargada y lista para presentar!`, 'success');
+        } else {
+            const err = resp ? await resp.json().catch(() => ({})) : {};
+            showToast('Error al guardar las fichas: ' + (err.error || 'Verifica los datos'), 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al guardar las fichas: ' + e.message, 'error');
+    } finally {
+        if (statusEl) statusEl.classList.add('hidden');
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+/**
+ * Parsea el formato Markdown de Fichas de Estudio:
+ * - Títulos ## -> Capítulos
+ * - Títulos ### -> Fichas individuales
+ * - Ignora separadores ---
+ */
+function parseStudyCardsMarkdown(markdownText) {
+    if (!markdownText || !markdownText.trim()) {
+        return { chapters: [], cards: [] };
+    }
+
+    const lines = markdownText.replace(/\r\n/g, '\n').split('\n');
+    const chapters = [];
+    const cards = [];
+
+    let currentChapter = null;
+    let currentCard = null;
+    let bodyBuffer = [];
+
+    const flushCard = () => {
+        if (!currentCard) return;
+        const bodyMd = bodyBuffer.join('\n').trim();
+        currentCard.bodyMarkdown = bodyMd;
+        currentCard.bodyHtml = renderStudyCardMarkdownBody(bodyMd);
+        cards.push(currentCard);
+        if (currentChapter) {
+            currentChapter.cards.push(currentCard);
+        }
+        currentCard = null;
+        bodyBuffer = [];
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+        const rawLine = lines[i];
+        const trimmed = rawLine.trim();
+
+        // Ignorar líneas divisoras ---
+        if (/^-{3,}$/.test(trimmed)) {
+            continue;
+        }
+
+        // Detectar Capítulo: ## Título (pero no ###)
+        const chapterMatch = rawLine.match(/^\s*##\s+([^#].*)$/);
+        if (chapterMatch) {
+            flushCard();
+            const chapTitle = cleanInlineMarkdownTitle(chapterMatch[1].trim());
+            currentChapter = {
+                index: chapters.length + 1,
+                title: chapTitle,
+                rawTitle: chapterMatch[1].trim(),
+                cards: []
+            };
+            chapters.push(currentChapter);
+            continue;
+        }
+
+        // Detectar Ficha: ### Ficha X · Pregunta o ### Título
+        const cardMatch = rawLine.match(/^\s*###\s+(.*)$/);
+        if (cardMatch) {
+            flushCard();
+            if (!currentChapter) {
+                currentChapter = {
+                    index: 1,
+                    title: 'General',
+                    rawTitle: 'General',
+                    cards: []
+                };
+                chapters.push(currentChapter);
+            }
+
+            const fullCardHeading = cardMatch[1].trim();
+            // Separar "Ficha X · ¿Pregunta?" si usa punto medio · o : o -
+            let badgeLabel = `Ficha ${cards.length + 1}`;
+            let cardTitle = fullCardHeading;
+
+            const dotSplit = fullCardHeading.match(/^(Ficha\s+\d+)\s*[·•:\-–—]\s*(.+)$/i);
+            if (dotSplit) {
+                badgeLabel = dotSplit[1].trim();
+                cardTitle = dotSplit[2].trim();
+            }
+
+            currentCard = {
+                index: cards.length,
+                number: cards.length + 1,
+                badgeLabel: badgeLabel,
+                title: cleanInlineMarkdownTitle(cardTitle),
+                rawHeading: fullCardHeading,
+                chapterIndex: currentChapter.index,
+                chapterTitle: currentChapter.title,
+                bodyMarkdown: '',
+                bodyHtml: ''
+            };
+            continue;
+        }
+
+        if (currentCard) {
+            bodyBuffer.push(rawLine);
+        }
+    }
+
+    flushCard();
+
+    return { chapters, cards };
+}
+
+function cleanInlineMarkdownTitle(text) {
+    if (!text) return '';
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1');
+}
+
+/**
+ * Renderiza el cuerpo Markdown de una ficha con diseño enriquecido para:
+ * - **Respuesta:** destacada en caja esmeralda/azul
+ * - 💡 Consejos / Analogías en caja ámbar
+ * - ⚠️ Advertencias en caja rosa/ámbar
+ * - Tablas Markdown estilizadas
+ * - Listas numeradas y con viñetas
+ */
+function renderStudyCardMarkdownBody(md) {
+    if (!md) return '<p class="text-slate-400 italic">Sin contenido adicional en esta ficha.</p>';
+
+    const lines = md.split('\n');
+    let html = '';
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+            i++;
+            continue;
+        }
+
+        // 1. Detectar Tabla Markdown
+        if (trimmed.startsWith('|') && trimmed.endsWith('|') && i + 1 < lines.length && /^\s*\|[\s\-:|]+\|\s*$/.test(lines[i + 1])) {
+            const headerCells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+            i += 2; // saltar cabecera y separador
+            const rows = [];
+            while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+                const rowCells = lines[i].trim().slice(1, -1).split('|').map(c => c.trim());
+                rows.push(rowCells);
+                i++;
+            }
+
+            html += `<div class="overflow-x-auto my-3"><table><thead><tr>`;
+            headerCells.forEach(h => {
+                html += `<th>${formatInlineMarkdown(h)}</th>`;
+            });
+            html += `</tr></thead><tbody>`;
+            rows.forEach(r => {
+                html += `<tr>`;
+                r.forEach((cell, idx) => {
+                    const weightClass = idx === 0 ? 'font-bold text-amber-300 whitespace-nowrap' : 'text-slate-200';
+                    html += `<td class="${weightClass}">${formatInlineMarkdown(cell)}</td>`;
+                });
+                html += `</tr>`;
+            });
+            html += `</tbody></table></div>`;
+            continue;
+        }
+
+        // 2. Detectar Lista Numerada
+        if (/^\d+\.\s+/.test(trimmed)) {
+            html += `<ol class="list-decimal pl-6 space-y-1.5 my-3 text-slate-200">`;
+            while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+                const itemText = lines[i].trim().replace(/^\d+\.\s+/, '');
+                html += `<li class="pl-1">${formatInlineMarkdown(itemText)}</li>`;
+                i++;
+            }
+            html += `</ol>`;
+            continue;
+        }
+
+        // 3. Detectar Lista con Viñetas
+        if (/^[-*+]\s+/.test(trimmed)) {
+            html += `<ul class="list-disc pl-6 space-y-1.5 my-3 text-slate-200">`;
+            while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+                const itemText = lines[i].trim().replace(/^[-*+]\s+/, '');
+                html += `<li class="pl-1">${formatInlineMarkdown(itemText)}</li>`;
+                i++;
+            }
+            html += `</ul>`;
+            continue;
+        }
+
+        // 4. Detectar bloque **Respuesta:**
+        if (/^\*\*Respuesta:\*\*/i.test(trimmed)) {
+            const restOfAnswer = trimmed.replace(/^\*\*Respuesta:\*\*\s*/i, '');
+            html += `
+                <div class="study-card-answer-box">
+                    <div class="flex items-start gap-2.5">
+                        <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-extrabold uppercase tracking-wider shrink-0 mt-0.5">Respuesta</span>
+                        <div class="text-slate-100 font-medium leading-relaxed">${formatInlineMarkdown(restOfAnswer)}</div>
+                    </div>
+                </div>
+            `;
+            i++;
+            continue;
+        }
+
+        // 5. Detectar bloque 💡 Consejo / Idea clave
+        if (trimmed.startsWith('💡')) {
+            const tipText = trimmed.replace(/^💡\s*/, '');
+            html += `
+                <div class="study-card-tip-box flex items-start gap-3">
+                    <span class="text-xl shrink-0 leading-none mt-0.5">💡</span>
+                    <div class="text-amber-100/95 text-sm leading-relaxed">${formatInlineMarkdown(tipText)}</div>
+                </div>
+            `;
+            i++;
+            continue;
+        }
+
+        // 6. Detectar bloque ⚠️ Advertencia / Importante
+        if (trimmed.startsWith('⚠️')) {
+            const warnText = trimmed.replace(/^⚠️\s*/, '');
+            html += `
+                <div class="study-card-warn-box flex items-start gap-3">
+                    <span class="text-xl shrink-0 leading-none mt-0.5">⚠️</span>
+                    <div class="text-rose-100/95 text-sm leading-relaxed">${formatInlineMarkdown(warnText)}</div>
+                </div>
+            `;
+            i++;
+            continue;
+        }
+
+        // 7. Párrafo de contexto en cursiva (*Caso de uso...*)
+        if (/^\*[^*]+\*$/.test(trimmed)) {
+            const italicContent = trimmed.slice(1, -1);
+            html += `
+                <div class="bg-slate-800/75 border-l-4 border-indigo-400 px-4 py-2.5 rounded-r-xl my-2.5 text-indigo-200 italic text-sm">
+                    ${formatInlineMarkdown(italicContent)}
+                </div>
+            `;
+            i++;
+            continue;
+        }
+
+        // 8. Párrafo estándar
+        html += `<p>${formatInlineMarkdown(trimmed)}</p>`;
+        i++;
+    }
+
+    return html;
+}
+
+function formatInlineMarkdown(text) {
+    if (!text) return '';
+    // Escapar HTML básico primero
+    let safe = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Código inline `code`
+    safe = safe.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[0.9em] border border-slate-700">$1</code>');
+    // Negrita **texto**
+    safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
+    // Cursiva *texto*
+    safe = safe.replace(/\*([^*]+)\*/g, '<em class="italic text-sky-200">$1</em>');
+
+    return safe;
+}
+
+/**
+ * Renderiza el selector superior de colecciones de fichas y actualiza la presentación activa
+ */
+function renderStudyCardsSection() {
+    const decksContainer = document.getElementById('study-cards-decks-container');
+    const countBadge = document.getElementById('study-cards-decks-count-badge');
+    const presentationWrapper = document.getElementById('study-cards-presentation-wrapper');
+    if (!decksContainer) return;
+
+    const studyCardDecks = (allMaterials || []).filter(m => isStudyCardsMaterial(m));
+
+    if (countBadge) {
+        countBadge.textContent = `${studyCardDecks.length} colecci${studyCardDecks.length === 1 ? 'ón' : 'ones'} disponible${studyCardDecks.length === 1 ? '' : 's'}`;
+    }
+
+    if (studyCardDecks.length === 0) {
+        decksContainer.innerHTML = `
+            <div class="col-span-full bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
+                <span class="text-4xl block mb-2">🗂️</span>
+                <p class="text-white font-bold text-sm">Aún no hay colecciones de Fichas de Aprendizaje</p>
+                <p class="text-slate-400 text-xs mt-1 mb-4">Carga tus apuntes con capítulos (##) y fichas (###) para estudiarlos como presentación interactiva.</p>
+                <button onclick="toggleStudyCardsUploadDrawer(true); loadSampleStudyCardsMarkdown();" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition">
+                    ✨ Cargar Fichas de Ejemplo FHIR
+                </button>
+            </div>
+        `;
+        if (presentationWrapper) presentationWrapper.classList.add('hidden');
+        return;
+    }
+
+    if (presentationWrapper) presentationWrapper.classList.remove('hidden');
+
+    // Si no hay mazo seleccionado o ya no existe, elegir el primero
+    if (!activeStudyCardDeckId || !studyCardDecks.some(d => d.id === activeStudyCardDeckId)) {
+        activeStudyCardDeckId = studyCardDecks[0].id;
+        activeStudyCardSlideIndex = 0;
+    }
+
+    decksContainer.innerHTML = '';
+    studyCardDecks.forEach(deck => {
+        const isSelected = deck.id === activeStudyCardDeckId;
+        const parsed = parseStudyCardsMarkdown(deck.contentText || '');
+        const linkedCount = deck.linkedQuestionsCount || 0;
+        const topicName = deck.topic ? deck.topic.name : 'General';
+
+        const cardEl = document.createElement('div');
+        cardEl.className = isSelected
+            ? 'p-4 rounded-2xl border-2 border-amber-500/80 bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 shadow-lg shadow-amber-950/20 cursor-pointer transition flex flex-col justify-between'
+            : 'p-4 rounded-2xl border border-slate-800/90 bg-slate-900/60 hover:bg-slate-900 hover:border-slate-700 cursor-pointer transition flex flex-col justify-between';
+
+        cardEl.onclick = () => selectStudyCardDeck(deck.id);
+
+        cardEl.innerHTML = `
+            <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">🗂️ ${parsed.cards.length} Fichas</span>
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-slate-800 text-slate-300 border border-slate-700">ID #${deck.id}</span>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteMaterial(${deck.id})" title="Eliminar colección" class="w-6 h-6 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition text-xs cursor-pointer">🗑️</button>
+                </div>
+                <h4 class="font-bold text-white text-sm leading-snug line-clamp-2">${deck.title}</h4>
+                <p class="text-[11px] text-slate-400 mt-1 truncate">📚 ${topicName} · ${parsed.chapters.length} capítulo${parsed.chapters.length === 1 ? '' : 's'}</p>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-semibold ${linkedCount > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+                        ${linkedCount > 0 ? `✅ ${linkedCount} preg.` : '⚪ 0 preg.'}
+                    </span>
+                    ${(deck.commentsCount || 0) > 0 ? `<span class="text-[11px] font-semibold text-indigo-300">· 💬 ${deck.commentsCount} nota${deck.commentsCount === 1 ? '' : 's'}</span>` : ''}
+                </div>
+                <span class="text-[11px] font-bold ${isSelected ? 'text-amber-400' : 'text-slate-400'}">
+                    ${isSelected ? '● En pantalla' : 'Ver presentación →'}
+                </span>
+            </div>
+        `;
+        decksContainer.appendChild(cardEl);
+    });
+
+    selectStudyCardDeck(activeStudyCardDeckId, true);
+}
+
+let activeDeckComments = [];
+let activeDeckCommentsLoadedForId = null;
+let isCardCommentComposerOpen = false;
+let isCardCommentPreviewVisible = false;
+let editingCardCommentId = null;
+
+function selectStudyCardDeck(id, preserveSlideIndex = false) {
+    const deck = (allMaterials || []).find(m => m.id === id);
+    if (!deck) return;
+
+    const changedDeck = activeStudyCardDeckId !== id;
+    activeStudyCardDeckId = id;
+    activeStudyCardParsedDeck = parseStudyCardsMarkdown(deck.contentText || '');
+
+    if (changedDeck || !preserveSlideIndex) {
+        activeStudyCardSlideIndex = 0;
+        editingCardCommentId = null;
+        toggleStudyCardCommentComposer(false);
+    }
+    if (activeStudyCardSlideIndex >= activeStudyCardParsedDeck.cards.length) {
+        activeStudyCardSlideIndex = Math.max(0, activeStudyCardParsedDeck.cards.length - 1);
+    }
+
+    // Actualizar barra superior del mazo activo
+    const titleEl = document.getElementById('sc-active-deck-title');
+    const idEl = document.getElementById('sc-active-deck-id');
+    const topicEl = document.getElementById('sc-active-deck-topic');
+    const metaEl = document.getElementById('sc-active-deck-meta');
+    const qBadgeEl = document.getElementById('sc-attached-q-badge');
+    const testBtnEl = document.getElementById('sc-btn-start-test');
+
+    if (titleEl) titleEl.textContent = deck.title;
+    if (idEl) idEl.textContent = `ID #${deck.id}`;
+    if (topicEl) topicEl.textContent = deck.topic ? deck.topic.name : 'General';
+    if (metaEl) {
+        const totalComments = deck.commentsCount || 0;
+        const commentsSuffix = totalComments > 0 ? ` · 💬 ${totalComments} comentario${totalComments === 1 ? '' : 's'}` : '';
+        metaEl.textContent = `${activeStudyCardParsedDeck.chapters.length} capítulo${activeStudyCardParsedDeck.chapters.length === 1 ? '' : 's'} · ${activeStudyCardParsedDeck.cards.length} ficha${activeStudyCardParsedDeck.cards.length === 1 ? '' : 's'}${commentsSuffix}`;
+    }
+
+    const linkedCount = deck.linkedQuestionsCount || 0;
+    if (qBadgeEl) qBadgeEl.textContent = String(linkedCount);
+
+    if (testBtnEl) {
+        if (linkedCount > 0) {
+            testBtnEl.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition cursor-pointer flex items-center gap-1.5';
+            testBtnEl.title = `Realizar prueba con las ${linkedCount} preguntas configuradas en estas fichas`;
+        } else {
+            testBtnEl.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-1.5';
+            testBtnEl.title = 'Configura o adjunta preguntas primero para activar la prueba de estas fichas';
+        }
+    }
+
+    // Refrescar borde activo en las tarjetas de colección sin recursión
+    const decksContainer = document.getElementById('study-cards-decks-container');
+    if (decksContainer && changedDeck) {
+        renderStudyCardsSection();
+        return;
+    }
+
+    renderStudyCardsChaptersTree();
+    renderStudyCardSlide();
+
+    if (changedDeck || activeDeckCommentsLoadedForId !== id) {
+        loadStudyCardComments(id);
+    }
+}
+
+function renderStudyCardsChaptersTree() {
+    const treeEl = document.getElementById('sc-chapters-tree');
+    const progressTextEl = document.getElementById('sc-seen-progress-badge') || document.getElementById('sc-deck-progress-text');
+    const progressBarEl = document.getElementById('sc-deck-progress-bar');
+    if (!treeEl || !activeStudyCardParsedDeck) return;
+
+    const totalCards = activeStudyCardParsedDeck.cards.length;
+    const currentPos = totalCards > 0 ? activeStudyCardSlideIndex + 1 : 0;
+    const pct = totalCards > 0 ? Math.round((currentPos / totalCards) * 100) : 0;
+
+    if (progressTextEl) progressTextEl.textContent = `${currentPos} / ${totalCards}`;
+    if (progressBarEl) progressBarEl.style.width = `${pct}%`;
+
+    treeEl.innerHTML = '';
+
+    activeStudyCardParsedDeck.chapters.forEach(chap => {
+        const chapBlock = document.createElement('div');
+        chapBlock.className = 'mb-3 last:mb-0';
+
+        const isCurrentChapter = chap.cards.some(c => c.index === activeStudyCardSlideIndex);
+
+        let cardsButtonsHtml = '';
+        chap.cards.forEach(c => {
+            const isCurrent = c.index === activeStudyCardSlideIndex;
+            const cardCommentsCount = (activeDeckComments || []).filter(cm => cm.cardIndex === c.index).length;
+            const commentBadgeHtml = cardCommentsCount > 0
+                ? `<span class="ml-auto px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono text-[9px] font-bold shrink-0" title="${cardCommentsCount} comentario(s)">💬 ${cardCommentsCount}</span>`
+                : '';
+
+            const btnClass = isCurrent
+                ? 'w-full text-left px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm'
+                : 'w-full text-left px-3 py-1.5 rounded-xl hover:bg-slate-800/70 text-slate-400 hover:text-slate-200 text-xs flex items-center gap-2 transition cursor-pointer';
+
+            cardsButtonsHtml += `
+                <button onclick="goToStudyCard(${c.index})" class="${btnClass}">
+                    <span class="w-5 h-5 rounded-md ${isCurrent ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'} font-mono text-[10px] font-bold flex items-center justify-center shrink-0">${c.number}</span>
+                    <span class="truncate">${c.title}</span>
+                    ${commentBadgeHtml}
+                </button>
+            `;
+        });
+
+        chapBlock.innerHTML = `
+            <div class="px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wider ${isCurrentChapter ? 'text-amber-400' : 'text-slate-400'} flex items-center justify-between">
+                <span class="truncate" title="${chap.title}">${chap.title}</span>
+                <span class="text-[10px] font-mono text-slate-500 ml-1 shrink-0">${chap.cards.length}</span>
+            </div>
+            <div class="space-y-1 mt-1 pl-1">
+                ${cardsButtonsHtml}
+            </div>
+        `;
+        treeEl.appendChild(chapBlock);
+    });
+}
+
+function renderStudyCardSlide() {
+    if (!activeStudyCardParsedDeck) return;
+    const cards = activeStudyCardParsedDeck.cards;
+    const total = cards.length;
+
+    const chapterPillEl = document.getElementById('sc-slide-chapter-badge') || document.getElementById('sc-slide-chapter-pill');
+    const counterPillEl = document.getElementById('sc-slide-counter') || document.getElementById('sc-slide-counter-pill');
+    const badgeEl = document.getElementById('sc-slide-ficha-pill') || document.getElementById('sc-slide-ficha-badge');
+    const titleEl = document.getElementById('sc-slide-title');
+    const bodyEl = document.getElementById('sc-slide-body');
+    const prevBtn = document.getElementById('sc-btn-prev');
+    const nextBtn = document.getElementById('sc-btn-next');
+    const finishTestBtn = document.getElementById('sc-btn-finish-test');
+    const dotsEl = document.getElementById('sc-progress-segments') || document.getElementById('sc-slide-dots');
+    const slideCardEl = document.getElementById('sc-slide-card');
+
+    if (total === 0) {
+        if (chapterPillEl) chapterPillEl.textContent = 'Sin capítulos';
+        if (counterPillEl) counterPillEl.textContent = 'Ficha 0 de 0';
+        if (badgeEl) badgeEl.textContent = 'Sin fichas';
+        if (titleEl) titleEl.textContent = 'No se encontraron fichas (###) en este documento';
+        if (bodyEl) bodyEl.innerHTML = '<p class="text-slate-400">Asegúrate de que cada ficha tenga un encabezado de nivel 3 (<code>### Ficha 1 · Título</code>).</p>';
+        return;
+    }
+
+    const card = cards[activeStudyCardSlideIndex] || cards[0];
+
+    // Animación sutil de transición de diapositiva
+    if (slideCardEl) {
+        slideCardEl.classList.remove('opacity-100', 'translate-y-0');
+        slideCardEl.classList.add('opacity-95');
+        setTimeout(() => {
+            slideCardEl.classList.remove('opacity-95');
+            slideCardEl.classList.add('opacity-100', 'translate-y-0');
+        }, 60);
+    }
+
+    if (chapterPillEl) chapterPillEl.textContent = `📂 ${card.chapterTitle}`;
+    if (counterPillEl) counterPillEl.textContent = `Ficha ${card.number} de ${total}`;
+    if (badgeEl) badgeEl.textContent = card.badgeLabel;
+    if (titleEl) titleEl.textContent = card.title;
+    if (bodyEl) bodyEl.innerHTML = card.bodyHtml;
+
+    if (prevBtn) {
+        prevBtn.disabled = activeStudyCardSlideIndex <= 0;
+    }
+    const isLastSlide = activeStudyCardSlideIndex >= total - 1;
+    if (nextBtn) {
+        nextBtn.disabled = isLastSlide;
+        nextBtn.innerHTML = isLastSlide
+            ? `<span>Última Ficha</span><span>✓</span>`
+            : `<span>Ficha Siguiente</span><span>→</span>`;
+    }
+    if (finishTestBtn) {
+        if (isLastSlide) {
+            finishTestBtn.classList.remove('hidden');
+            finishTestBtn.classList.add('flex');
+        } else {
+            finishTestBtn.classList.add('hidden');
+            finishTestBtn.classList.remove('flex');
+        }
+    }
+
+    // Segmentos interactivos inferiores
+    if (dotsEl) {
+        dotsEl.innerHTML = cards.map((c, idx) => {
+            const isCurrent = idx === activeStudyCardSlideIndex;
+            const isPast = idx < activeStudyCardSlideIndex;
+            const hasComments = (activeDeckComments || []).some(cm => cm.cardIndex === idx);
+            const cls = isCurrent
+                ? 'h-2.5 w-8 rounded-full bg-amber-400 transition-all cursor-pointer shadow-sm shadow-amber-400/50'
+                : (isPast
+                    ? `h-2 w-3 rounded-full ${hasComments ? 'bg-indigo-400/80' : 'bg-amber-500/40'} hover:bg-amber-400/70 transition-all cursor-pointer`
+                    : `h-2 w-2.5 rounded-full ${hasComments ? 'bg-indigo-500/60' : 'bg-slate-800'} hover:bg-slate-600 transition-all cursor-pointer`);
+            return `<button onclick="goToStudyCard(${idx})" title="${c.badgeLabel}: ${c.title}${hasComments ? ' (Con comentarios)' : ''}" class="${cls}"></button>`;
+        }).join('');
+    }
+
+    renderStudyCardsChaptersTree();
+    renderActiveStudyCardComments();
+}
+
+function prevStudyCard() {
+    if (!activeStudyCardParsedDeck || activeStudyCardSlideIndex <= 0) return;
+    activeStudyCardSlideIndex--;
+    renderStudyCardSlide();
+}
+
+function nextStudyCard() {
+    if (!activeStudyCardParsedDeck) return;
+    if (activeStudyCardSlideIndex < activeStudyCardParsedDeck.cards.length - 1) {
+        activeStudyCardSlideIndex++;
+        renderStudyCardSlide();
+    }
+}
+
+function goToStudyCard(index) {
+    if (!activeStudyCardParsedDeck) return;
+    if (index >= 0 && index < activeStudyCardParsedDeck.cards.length) {
+        activeStudyCardSlideIndex = index;
+        renderStudyCardSlide();
+    }
+}
+
+function toggleStudyCardsFocusMode() {
+    const sidebarCol = document.getElementById('sc-chapters-sidebar') || document.getElementById('sc-sidebar-col');
+    const stageCol = document.getElementById('sc-slide-column') || document.getElementById('sc-stage-col');
+    const focusBtn = document.getElementById('sc-btn-focus') || document.getElementById('sc-btn-focus-mode');
+    if (!sidebarCol || !stageCol) return;
+
+    isStudyCardsFocusMode = !isStudyCardsFocusMode;
+    if (isStudyCardsFocusMode) {
+        sidebarCol.classList.add('hidden');
+        stageCol.className = 'lg:col-span-12 flex flex-col';
+        if (focusBtn) focusBtn.textContent = '🗗 Mostrar Índice';
+    } else {
+        sidebarCol.classList.remove('hidden');
+        stageCol.className = 'lg:col-span-8 flex flex-col';
+        if (focusBtn) focusBtn.textContent = '⛶ Ampliar';
+    }
+}
+
+function handleStudyCardsTestClick() {
+    if (!activeStudyCardDeckId) return;
+    const deck = (allMaterials || []).find(m => m.id === activeStudyCardDeckId);
+    if (!deck) return;
+
+    const linkedCount = deck.linkedQuestionsCount || 0;
+    if (linkedCount === 0) {
+        showToast('Esta colección de fichas aún no tiene preguntas adjuntas. Adjunta o genera preguntas primero.', 'info');
+        openAttachQuestionsModal(deck.id);
+        return;
+    }
+
+    openPracticeMaterialModal(deck.id);
+}
+
+// Navegación por teclado (← y →) cuando la presentación de fichas está en pantalla y no hay modales ni inputs activos
+document.addEventListener('keydown', (e) => {
+    const viewMat = document.getElementById('view-materials');
+    if (!viewMat || viewMat.classList.contains('hidden') || activeMaterialSubview !== 'cards') return;
+
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
+
+    // Ignorar si hay algún modal abierto
+    const openModals = document.querySelectorAll('[id^="modal-"]:not(.hidden)');
+    if (openModals.length > 0) return;
+
+    if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        nextStudyCard();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevStudyCard();
+    }
+});
+
+// =================== MODAL: ADJUNTAR Y GESTIONAR PREGUNTAS DE FICHAS ===================
+
+async function openAttachQuestionsModal(materialId) {
+    const targetId = materialId || activeStudyCardDeckId;
+    if (!targetId) return;
+
+    activeAttachQuestionsDeckId = targetId;
+    selectedBankQuestionIds.clear();
+
+    const mat = (allMaterials || []).find(m => m.id === targetId);
+    const titleEl = document.getElementById('attach-q-mat-title') || document.getElementById('attach-q-deck-title');
+    const idBadgeEl = document.getElementById('attach-q-mat-id-badge') || document.getElementById('attach-q-deck-id-badge');
+
+    if (titleEl) titleEl.textContent = mat ? mat.title : `Colección #${targetId}`;
+    if (idBadgeEl) idBadgeEl.textContent = `ID #${targetId}`;
+
+    openModal('modal-attach-questions');
+    switchAttachQuestionsTab('linked');
+    await refreshAttachedQuestionsData();
+}
+
+function switchAttachQuestionsTab(tab) {
+    activeAttachQuestionsTab = tab;
+    const tabs = ['linked', 'bank', 'json', 'create'];
+    tabs.forEach(t => {
+        const panel = document.getElementById(`attach-panel-${t}`);
+        const btn = document.getElementById(`attach-tab-${t}-btn`) || document.getElementById(`attach-tab-${t}`);
+        if (t === tab) {
+            if (panel) panel.classList.remove('hidden');
+            if (btn) {
+                btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white transition cursor-pointer flex items-center gap-1.5';
+            }
+        } else {
+            if (panel) panel.classList.add('hidden');
+            if (btn) {
+                btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5';
+            }
+        }
+    });
+
+    if (tab === 'bank') {
+        renderAttachBankQuestionsList();
+    }
+}
+
+async function refreshAttachedQuestionsData() {
+    if (!activeAttachQuestionsDeckId) return;
+
+    const listEl = document.getElementById('attach-linked-list') || document.getElementById('attach-linked-questions-list');
+    const countBadge = document.getElementById('attach-tab-linked-count');
+    const footerStatus = document.getElementById('attach-modal-footer-status');
+    const testBtn = document.getElementById('attach-modal-btn-test');
+
+    try {
+        const resp = await fetch(`/api/materials/${activeAttachQuestionsDeckId}/questions`);
+        if (!resp.ok) return;
+        const linkedQuestions = await resp.json();
+
+        // Actualizar contador en memoria
+        const mat = (allMaterials || []).find(m => m.id === activeAttachQuestionsDeckId);
+        if (mat) {
+            mat.linkedQuestionsCount = linkedQuestions.length;
+        }
+
+        if (countBadge) countBadge.textContent = String(linkedQuestions.length);
+
+        if (footerStatus) {
+            footerStatus.textContent = linkedQuestions.length > 0
+                ? `✅ Prueba activa: ${linkedQuestions.length} pregunta${linkedQuestions.length === 1 ? '' : 's'} lista${linkedQuestions.length === 1 ? '' : 's'} para evaluar esta colección.`
+                : '⚪ Aún no hay preguntas vinculadas. Usa las pestañas superiores para adjuntar o crear preguntas.';
+        }
+
+        if (testBtn) {
+            if (linkedQuestions.length > 0) {
+                testBtn.classList.remove('hidden');
+            } else {
+                testBtn.classList.add('hidden');
+            }
+        }
+
+        if (listEl) {
+            if (linkedQuestions.length === 0) {
+                listEl.innerHTML = `
+                    <div class="bg-slate-950/60 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
+                        <span class="text-3xl block mb-2">📎</span>
+                        <p class="text-white font-bold text-sm">Esta colección de fichas aún no tiene preguntas adjuntas</p>
+                        <p class="text-slate-400 text-xs mt-1 mb-4">Puedes vincular preguntas existentes del banco, importar un bloque JSON o crear preguntas nuevas.</p>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <button onclick="switchAttachQuestionsTab('bank')" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs cursor-pointer transition">
+                                🏦 Seleccionar del Banco
+                            </button>
+                            <button onclick="switchAttachQuestionsTab('json')" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs cursor-pointer transition">
+                                📥 Importar JSON
+                            </button>
+                            <button onclick="switchAttachQuestionsTab('create')" class="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-bold text-xs cursor-pointer transition">
+                                ✍️ Crear / Generar con IA
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = linkedQuestions.map((q) => {
+                    const correctOpt = (q.options || []).find(o => o.correct);
+                    const correctLabel = correctOpt ? correctOpt.optionLabel : (q.correctAnswer || '-');
+                    return `
+                    <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/90 hover:border-slate-700 flex items-start justify-between gap-3 transition">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[10px] font-bold">#${q.id}</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-semibold">Dif: ${q.difficulty || 2}/3</span>
+                                <span class="text-[11px] text-emerald-400 font-mono font-bold">Resp: ${correctLabel}</span>
+                            </div>
+                            <p class="text-xs text-slate-200 font-medium leading-relaxed">${q.stem}</p>
+                        </div>
+                        <button onclick="detachQuestionFromDeck(${activeAttachQuestionsDeckId}, ${q.id})" title="Desvincular de estas fichas" class="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-bold shrink-0 cursor-pointer transition">
+                            Quitar
+                        </button>
+                    </div>
+                `;
+                }).join('');
+            }
+        }
+
+        // Actualizar vista de Fichas si está activa
+        if (activeStudyCardDeckId === activeAttachQuestionsDeckId) {
+            selectStudyCardDeck(activeStudyCardDeckId, true);
+        }
+    } catch (e) {
+        console.error('Error cargando preguntas vinculadas:', e);
+    }
+}
+
+async function detachQuestionFromDeck(materialId, questionId) {
+    try {
+        const resp = await fetch(`/api/materials/${materialId}/questions/${questionId}`, {
+            method: 'DELETE'
+        });
+        if (resp.ok) {
+            showToast('Pregunta desvinculada de la colección de fichas.', 'info');
+            await loadQuestions();
+            await refreshAttachedQuestionsData();
+        }
+    } catch (e) {
+        showToast('Error al desvincular la pregunta.', 'error');
+    }
+}
+
+function renderAttachBankQuestionsList() {
+    const container = document.getElementById('attach-bank-list') || document.getElementById('attach-bank-questions-list');
+    const searchInput = document.getElementById('attach-bank-search');
+    const selCountEl = document.getElementById('attach-bank-selected-count');
+    if (!container) return;
+
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    // Mostrar preguntas que no estén ya vinculadas a esta colección
+    const available = (allQuestions || []).filter(q => {
+        const currentMatId = q.studyMaterial ? q.studyMaterial.id : q.materialId;
+        if (currentMatId === activeAttachQuestionsDeckId) return false;
+        if (!query) return true;
+        const stemMatch = q.stem && q.stem.toLowerCase().includes(query);
+        const topicMatch = q.topic && q.topic.name && q.topic.name.toLowerCase().includes(query);
+        return stemMatch || topicMatch || String(q.id).includes(query);
+    });
+
+    if (selCountEl) {
+        selCountEl.textContent = `${selectedBankQuestionIds.size} seleccionada${selectedBankQuestionIds.size === 1 ? '' : 's'}`;
+    }
+
+    if (available.length === 0) {
+        container.innerHTML = `
+            <div class="p-6 text-center text-slate-500 text-xs">
+                No se encontraron preguntas disponibles con ese filtro (o todas están ya vinculadas a esta colección).
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = available.map(q => {
+        const isChecked = selectedBankQuestionIds.has(q.id);
+        const topicName = q.topic ? q.topic.name : 'General';
+        const correctOpt = (q.options || []).find(o => o.correct);
+        const correctLabel = correctOpt ? correctOpt.optionLabel : (q.correctAnswer || '-');
+        return `
+            <label class="p-3 rounded-xl border ${isChecked ? 'bg-indigo-600/15 border-indigo-500/50' : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700'} flex items-start gap-3 cursor-pointer transition">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelectBankQuestionForDeck(${q.id}, this.checked)" class="mt-1 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <span class="font-mono text-[10px] font-bold text-indigo-400">#${q.id}</span>
+                        <span class="text-[10px] text-slate-400 truncate">📚 ${topicName}</span>
+                        <span class="text-[10px] font-mono text-emerald-400 ml-auto">Resp: ${correctLabel}</span>
+                    </div>
+                    <p class="text-xs text-slate-200 line-clamp-2">${q.stem}</p>
+                </div>
+            </label>
+        `;
+    }).join('');
+}
+
+function toggleSelectBankQuestionForDeck(questionId, checked) {
+    if (checked) {
+        selectedBankQuestionIds.add(questionId);
+    } else {
+        selectedBankQuestionIds.delete(questionId);
+    }
+    renderAttachBankQuestionsList();
+}
+
+async function attachSelectedBankQuestions() {
+    if (!activeAttachQuestionsDeckId || selectedBankQuestionIds.size === 0) {
+        showToast('Selecciona al menos una pregunta del banco.', 'info');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/materials/${activeAttachQuestionsDeckId}/questions/attach`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionIds: Array.from(selectedBankQuestionIds) })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            selectedBankQuestionIds.clear();
+            await loadQuestions();
+            await refreshAttachedQuestionsData();
+            switchAttachQuestionsTab('linked');
+            showToast(`¡Se adjuntaron ${data.attachedCount} preguntas a las fichas!`, 'success');
+        }
+    } catch (e) {
+        showToast('Error al adjuntar preguntas del banco.', 'error');
+    }
+}
+
+function loadSampleAttachJson() {
+    const textarea = document.getElementById('attach-json-textarea');
+    if (!textarea) return;
+    textarea.value = JSON.stringify([
+        {
+            "stem": "Según las fichas de paradigmas FHIR, ¿qué paradigma es el más adecuado cuando dos organizaciones casi no comparten procesos internos?",
+            "explanation": "La Ficha 9 destaca que Mensajes (Messaging) es buena idea para el intercambio entre organizaciones dispares con bajo nivel de integración de procesos.",
+            "difficulty": 2,
+            "questionType": "SINGLE_CHOICE",
+            "source": "MANUAL",
+            "options": [
+                { "optionLabel": "A", "optionText": "Base de datos compartida (Persistent store)", "correct": false, "distractorReason": "El almacenamiento persistente es para guardar datos internamente." },
+                { "optionLabel": "B", "optionText": "Mensajes (Messaging)", "correct": true, "distractorReason": "Correcto: encamina mensajes entre organizaciones dispares." },
+                { "optionLabel": "C", "optionText": "Consultas GraphQL síncronas", "correct": false, "distractorReason": "GraphQL forma parte del paradigma REST." },
+                { "optionLabel": "D", "optionText": "Operaciones CRUD directas sin gobernanza", "correct": false, "distractorReason": "REST requiere acuerdos de gobernanza previos." }
+            ]
+        }
+    ], null, 2);
+}
+
+async function submitAttachJsonQuestions() {
+    if (!activeAttachQuestionsDeckId) return;
+    const textarea = document.getElementById('attach-json-textarea');
+    const jsonText = textarea ? textarea.value.trim() : '';
+    if (!jsonText) {
+        showToast('Pega un array JSON de preguntas.', 'error');
+        return;
+    }
+
+    const mat = (allMaterials || []).find(m => m.id === activeAttachQuestionsDeckId);
+    const topicParam = mat && mat.topic ? `&defaultTopicId=${mat.topic.id}` : '';
+
+    try {
+        const resp = await fetch(`/api/questions/import?defaultMaterialId=${activeAttachQuestionsDeckId}${topicParam}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: jsonText
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+            textarea.value = '';
+            await loadQuestions();
+            await refreshAttachedQuestionsData();
+            switchAttachQuestionsTab('linked');
+            showToast(`¡${data.importedCount} pregunta(s) importada(s) y vinculada(s) a estas fichas!`, 'success');
+        } else {
+            showToast('Error en el JSON: ' + (data.error || 'Revisa el formato'), 'error');
+        }
+    } catch (e) {
+        showToast('Error al importar JSON: ' + e.message, 'error');
+    }
+}
+
+async function submitCreateAttachedQuestion(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    if (!activeAttachQuestionsDeckId) return;
+
+    const mat = (allMaterials || []).find(m => m.id === activeAttachQuestionsDeckId);
+    const stemEl = document.getElementById('attach-new-q-stem');
+    const optAEl = document.getElementById('attach-new-q-opt-a') || document.getElementById('attach-new-q-a');
+    const optBEl = document.getElementById('attach-new-q-opt-b') || document.getElementById('attach-new-q-b');
+    const optCEl = document.getElementById('attach-new-q-opt-c') || document.getElementById('attach-new-q-c');
+    const optDEl = document.getElementById('attach-new-q-opt-d') || document.getElementById('attach-new-q-d');
+    const expEl = document.getElementById('attach-new-q-explanation') || document.getElementById('attach-new-q-exp');
+    const correctRadio = document.querySelector('input[name="attach-new-q-correct"]:checked');
+    const correctSelect = document.getElementById('attach-new-q-correct');
+
+    const stem = stemEl ? stemEl.value.trim() : '';
+    const optA = optAEl ? optAEl.value.trim() : '';
+    const optB = optBEl ? optBEl.value.trim() : '';
+    const optC = optCEl ? optCEl.value.trim() : '';
+    const optD = optDEl ? optDEl.value.trim() : '';
+    const correctLabel = correctRadio ? correctRadio.value : (correctSelect ? correctSelect.value : 'A');
+    const explanation = expEl && expEl.value.trim() ? expEl.value.trim() : 'Pregunta vinculada a la colección de fichas.';
+
+    if (!stem || !optA || !optB) {
+        showToast('Completa al menos el enunciado y las opciones A y B.', 'warning');
+        return;
+    }
+
+    const options = [
+        { optionLabel: 'A', optionText: optA, correct: correctLabel === 'A', distractorReason: null },
+        { optionLabel: 'B', optionText: optB, correct: correctLabel === 'B', distractorReason: null }
+    ];
+    if (optC) options.push({ optionLabel: 'C', optionText: optC, correct: correctLabel === 'C', distractorReason: null });
+    if (optD) options.push({ optionLabel: 'D', optionText: optD, correct: correctLabel === 'D', distractorReason: null });
+
+    const payload = {
+        stem,
+        explanation,
+        difficulty: 2,
+        questionType: 'SINGLE_CHOICE',
+        source: 'MANUAL',
+        materialId: activeAttachQuestionsDeckId,
+        topicId: mat && mat.topic ? mat.topic.id : 1,
+        options
+    };
+
+    try {
+        const resp = await fetch('/api/questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (resp.ok) {
+            if (stemEl) stemEl.value = '';
+            if (optAEl) optAEl.value = '';
+            if (optBEl) optBEl.value = '';
+            if (optCEl) optCEl.value = '';
+            if (optDEl) optDEl.value = '';
+            if (expEl) expEl.value = '';
+            await loadQuestions();
+            await refreshAttachedQuestionsData();
+            switchAttachQuestionsTab('linked');
+            showToast('¡Pregunta creada y adjuntada a la colección de fichas!', 'success');
+        } else {
+            showToast('No se pudo guardar la pregunta.', 'error');
+        }
+    } catch (e) {
+        showToast('Error al crear la pregunta: ' + e.message, 'error');
+    }
+}
+
+async function generateQuestionFromAttachModal() {
+    if (!activeAttachQuestionsDeckId) return;
+    const btn = document.getElementById('btn-attach-ai-gen');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Generando con IA...';
+    }
+
+    try {
+        const resp = await fetch(`/api/materials/${activeAttachQuestionsDeckId}/generate-question`, {
+            method: 'POST'
+        });
+        if (resp.ok) {
+            await loadQuestions();
+            await refreshAttachedQuestionsData();
+            switchAttachQuestionsTab('linked');
+            showToast('¡Pregunta generada a partir del contenido de las fichas!', 'success');
+        } else {
+            showToast('No se pudo generar la pregunta automáticamente.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de conexión al generar pregunta.', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '✨ Generar 1 Pregunta IA';
+        }
+    }
+}
+
+// =================== COMENTARIOS Y NOTAS DE AMPLIACIÓN EN FICHAS DE ESTUDIO ===================
+
+async function loadStudyCardComments(materialId) {
+    if (!materialId) return;
+    try {
+        const resp = await fetch(`/api/materials/${materialId}/comments`);
+        if (resp.ok) {
+            activeDeckComments = await resp.json();
+            activeDeckCommentsLoadedForId = materialId;
+
+            const deck = (allMaterials || []).find(m => m.id === materialId);
+            if (deck) {
+                deck.commentsCount = activeDeckComments.length;
+                const metaEl = document.getElementById('sc-active-deck-meta');
+                if (metaEl && activeStudyCardParsedDeck && activeStudyCardDeckId === materialId) {
+                    const totalComments = deck.commentsCount || 0;
+                    const commentsSuffix = totalComments > 0 ? ` · 💬 ${totalComments} comentario${totalComments === 1 ? '' : 's'}` : '';
+                    metaEl.textContent = `${activeStudyCardParsedDeck.chapters.length} capítulo${activeStudyCardParsedDeck.chapters.length === 1 ? '' : 's'} · ${activeStudyCardParsedDeck.cards.length} ficha${activeStudyCardParsedDeck.cards.length === 1 ? '' : 's'}${commentsSuffix}`;
+                }
+            }
+
+            renderStudyCardsChaptersTree();
+            renderActiveStudyCardComments();
+        }
+    } catch (e) {
+        console.error('Error cargando comentarios de fichas:', e);
+    }
+}
+
+function renderActiveStudyCardComments() {
+    const listEl = document.getElementById('sc-slide-comments-list');
+    const countEl = document.getElementById('sc-slide-comments-count');
+    if (!listEl) return;
+
+    const currentCardComments = (activeDeckComments || []).filter(cm => cm.cardIndex === activeStudyCardSlideIndex);
+    if (countEl) {
+        countEl.textContent = String(currentCardComments.length);
+    }
+
+    if (currentCardComments.length === 0) {
+        listEl.innerHTML = `
+            <div class="bg-slate-950/50 border border-dashed border-slate-800/80 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                <span class="text-xs text-slate-400">
+                    Aún no hay comentarios en esta ficha. Añade notas, ejemplos o aclaraciones en texto o Markdown.
+                </span>
+                <button type="button" onclick="toggleStudyCardCommentComposer(true)" class="text-xs font-bold text-indigo-400 hover:text-indigo-300 shrink-0 cursor-pointer">
+                    + Añadir nota →
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = currentCardComments.map((cm, idx) => {
+        if (editingCardCommentId === cm.id) {
+            const safeRaw = (cm.contentMarkdown || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            return `
+                <div class="bg-slate-950/95 border border-indigo-500/60 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-indigo-300">✏️ Editando Comentario #${idx + 1}</span>
+                        <span class="text-[10px] font-mono text-slate-500">${cm.createdAt || ''}</span>
+                    </div>
+                    <textarea id="sc-edit-comment-textarea-${cm.id}" rows="4" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 leading-relaxed">${safeRaw}</textarea>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="cancelEditStudyCardComment()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer">
+                            Cancelar
+                        </button>
+                        <button type="button" onclick="saveEditedStudyCardComment(${cm.id})" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer">
+                            💾 Actualizar Comentario
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        const dateText = cm.updatedAt ? `Editado: ${cm.updatedAt}` : (cm.createdAt || '');
+        const renderedBody = renderStudyCardMarkdownBody(cm.contentMarkdown || '');
+
+        return `
+            <div class="bg-slate-950/80 border border-slate-800/90 hover:border-slate-700/90 rounded-2xl p-4 transition space-y-2 shadow-sm">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono text-[10px] font-bold">
+                            Nota #${idx + 1}
+                        </span>
+                        <span class="text-[11px] font-mono text-slate-500">${dateText}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="startEditStudyCardComment(${cm.id})" title="Editar comentario" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-semibold transition cursor-pointer">
+                            ✏️ Editar
+                        </button>
+                        <button type="button" onclick="deleteStudyCardComment(${cm.id})" title="Eliminar comentario" class="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-semibold transition cursor-pointer">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                <div class="study-card-body text-sm pt-0.5">
+                    ${renderedBody}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleStudyCardCommentComposer(forceState) {
+    const box = document.getElementById('sc-comment-composer-box');
+    const icon = document.getElementById('sc-btn-toggle-comment-icon');
+    const label = document.getElementById('sc-btn-toggle-comment-label');
+    const textarea = document.getElementById('sc-comment-textarea');
+    if (!box) return;
+
+    isCardCommentComposerOpen = typeof forceState === 'boolean' ? forceState : !isCardCommentComposerOpen;
+
+    if (isCardCommentComposerOpen) {
+        box.classList.remove('hidden');
+        if (icon) icon.textContent = '✕';
+        if (label) label.textContent = 'Cerrar editor';
+        if (textarea) {
+            setTimeout(() => textarea.focus(), 60);
+        }
+    } else {
+        box.classList.add('hidden');
+        if (icon) icon.textContent = '➕';
+        if (label) label.textContent = 'Añadir Comentario';
+    }
+}
+
+function insertCardCommentSnippet(prefix, suffix, placeholder) {
+    const textarea = document.getElementById('sc-comment-textarea');
+    if (!textarea) return;
+
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const text = textarea.value;
+    const selected = text.substring(start, end) || placeholder;
+
+    const replacement = `${prefix}${selected}${suffix}`;
+    textarea.value = text.substring(0, start) + replacement + text.substring(end);
+    textarea.focus();
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+    updateCardCommentLivePreview();
+}
+
+function toggleCardCommentPreview() {
+    const wrapper = document.getElementById('sc-comment-preview-wrapper');
+    const btn = document.getElementById('sc-btn-comment-preview');
+    if (!wrapper) return;
+
+    isCardCommentPreviewVisible = !isCardCommentPreviewVisible;
+    if (isCardCommentPreviewVisible) {
+        wrapper.classList.remove('hidden');
+        if (btn) btn.textContent = '🙈 Ocultar vista previa';
+        updateCardCommentLivePreview();
+    } else {
+        wrapper.classList.add('hidden');
+        if (btn) btn.textContent = '👁️ Mostrar vista previa';
+    }
+}
+
+function updateCardCommentLivePreview() {
+    if (!isCardCommentPreviewVisible) return;
+    const textarea = document.getElementById('sc-comment-textarea');
+    const previewBody = document.getElementById('sc-comment-preview-body');
+    if (!previewBody) return;
+
+    const raw = textarea ? textarea.value.trim() : '';
+    previewBody.innerHTML = raw
+        ? renderStudyCardMarkdownBody(raw)
+        : '<p class="text-slate-500 italic text-xs">Escribe algo arriba para previsualizar el formato...</p>';
+}
+
+async function submitNewStudyCardComment() {
+    if (!activeStudyCardDeckId || !activeStudyCardParsedDeck) return;
+    const textarea = document.getElementById('sc-comment-textarea');
+    const saveBtn = document.getElementById('sc-btn-save-comment');
+    const contentMarkdown = textarea ? textarea.value.trim() : '';
+
+    if (!contentMarkdown) {
+        showToast('Escribe el contenido del comentario antes de guardar.', 'warning');
+        return;
+    }
+
+    const currentCard = activeStudyCardParsedDeck.cards[activeStudyCardSlideIndex];
+    const cardHeading = currentCard ? currentCard.rawHeading : `Ficha ${activeStudyCardSlideIndex + 1}`;
+
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        const resp = await fetch(`/api/materials/${activeStudyCardDeckId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cardIndex: activeStudyCardSlideIndex,
+                cardHeading: cardHeading,
+                contentMarkdown: contentMarkdown
+            })
+        });
+
+        if (resp.ok) {
+            if (textarea) textarea.value = '';
+            updateCardCommentLivePreview();
+            toggleStudyCardCommentComposer(false);
+            await loadStudyCardComments(activeStudyCardDeckId);
+            showToast('¡Comentario añadido a la ficha!', 'success');
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo guardar el comentario.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al guardar el comentario: ' + e.message, 'error');
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+function startEditStudyCardComment(commentId) {
+    editingCardCommentId = commentId;
+    renderActiveStudyCardComments();
+    const editArea = document.getElementById(`sc-edit-comment-textarea-${commentId}`);
+    if (editArea) {
+        setTimeout(() => editArea.focus(), 50);
+    }
+}
+
+function cancelEditStudyCardComment() {
+    editingCardCommentId = null;
+    renderActiveStudyCardComments();
+}
+
+async function saveEditedStudyCardComment(commentId) {
+    if (!activeStudyCardDeckId) return;
+    const editArea = document.getElementById(`sc-edit-comment-textarea-${commentId}`);
+    const contentMarkdown = editArea ? editArea.value.trim() : '';
+
+    if (!contentMarkdown) {
+        showToast('El comentario no puede quedar vacío.', 'warning');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/materials/${activeStudyCardDeckId}/comments/${commentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contentMarkdown })
+        });
+        if (resp.ok) {
+            editingCardCommentId = null;
+            await loadStudyCardComments(activeStudyCardDeckId);
+            showToast('Comentario actualizado.', 'success');
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo actualizar el comentario.', 'error');
+        }
+    } catch (e) {
+        showToast('Error al actualizar comentario: ' + e.message, 'error');
+    }
+}
+
+async function deleteStudyCardComment(commentId) {
+    if (!activeStudyCardDeckId) return;
+    const confirmed = await showConfirmModal({
+        title: '¿Eliminar este comentario?',
+        subtitle: 'Esta nota adicional se borrará de la ficha actual',
+        message: '¿Estás seguro de que deseas eliminar este comentario de la ficha?',
+        confirmText: 'Sí, eliminar',
+        icon: '🗑️'
+    });
+    if (!confirmed) return;
+
+    try {
+        const resp = await fetch(`/api/materials/${activeStudyCardDeckId}/comments/${commentId}`, {
+            method: 'DELETE'
+        });
+        if (resp.ok) {
+            if (editingCardCommentId === commentId) editingCardCommentId = null;
+            await loadStudyCardComments(activeStudyCardDeckId);
+            showToast('Comentario eliminado.', 'info');
+        } else {
+            showToast('No se pudo eliminar el comentario.', 'error');
+        }
+    } catch (e) {
+        showToast('Error al eliminar comentario: ' + e.message, 'error');
+    }
+}
+
+// Atajo Ctrl + Enter dentro del textarea de comentarios para guardar rápidamente
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (e.target && e.target.id === 'sc-comment-textarea') {
+            e.preventDefault();
+            submitNewStudyCardComment();
+        }
+    }
+});
+
+
 

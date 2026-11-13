@@ -29,6 +29,12 @@ public class StudyMaterial {
     @Column(name = "file_path")
     private String filePath;
 
+    @Transient
+    private long linkedQuestionsCount;
+
+    @Transient
+    private long commentsCount;
+
     public StudyMaterial() {}
 
     public StudyMaterial(SyllabusTopic topic, String sourceType, String title, String contentText, String referenceUrlOrPage) {
@@ -59,4 +65,10 @@ public class StudyMaterial {
 
     public String getFilePath() { return filePath; }
     public void setFilePath(String filePath) { this.filePath = filePath; }
+
+    public long getLinkedQuestionsCount() { return linkedQuestionsCount; }
+    public void setLinkedQuestionsCount(long linkedQuestionsCount) { this.linkedQuestionsCount = linkedQuestionsCount; }
+
+    public long getCommentsCount() { return commentsCount; }
+    public void setCommentsCount(long commentsCount) { this.commentsCount = commentsCount; }
 }

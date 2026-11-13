@@ -67,9 +67,10 @@ public class StudyMaterialController {
     public ResponseEntity<?> uploadMarkdownFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam("topicId") Long topicId,
-            @RequestParam(value = "title", required = false) String title) {
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "sourceType", required = false) String sourceType) {
         try {
-            StudyMaterial saved = studyMaterialService.saveMarkdownFile(file, topicId, title);
+            StudyMaterial saved = studyMaterialService.saveMarkdownFile(file, topicId, title, sourceType);
             return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -83,6 +84,7 @@ public class StudyMaterialController {
         try {
             Long topicId = Long.valueOf(payload.get("topicId").toString());
             String title = (String) payload.get("title");
+            String sourceType = payload.get("sourceType") != null ? payload.get("sourceType").toString() : null;
             String content = (String) payload.get("content");
             if (content == null || content.trim().isEmpty()) {
                 content = (String) payload.get("contentText");
@@ -90,7 +92,7 @@ public class StudyMaterialController {
             if (content == null || content.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "El contenido Markdown no puede estar vacío."));
             }
-            StudyMaterial saved = studyMaterialService.saveMarkdownText(topicId, title, content);
+            StudyMaterial saved = studyMaterialService.saveMarkdownText(topicId, title, content, sourceType);
             return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -103,6 +105,87 @@ public class StudyMaterialController {
     public ResponseEntity<StudyMaterial> getMaterial(@PathVariable Long id) {
         StudyMaterial m = studyMaterialService.getMaterialById(id);
         return m != null ? ResponseEntity.ok(m) : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/{id}/questions")
+    public ResponseEntity<?> getMaterialQuestions(@PathVariable Long id) {
+        return ResponseEntity.ok(studyMaterialService.getLinkedQuestions(id));
+    }
+
+    @PostMapping("/{id}/questions/attach")
+    public ResponseEntity<?> attachQuestions(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        try {
+            Object rawIds = payload.get("questionIds");
+            java.util.List<Long> qIds = new java.util.ArrayList<>();
+            if (rawIds instanceof java.util.List<?> list) {
+                for (Object item : list) {
+                    if (item != null) {
+                        qIds.add(Long.valueOf(item.toString()));
+                    }
+                }
+            }
+            int attached = studyMaterialService.attachQuestionsToMaterial(id, qIds);
+            return ResponseEntity.ok(Map.of("success", true, "attachedCount", attached));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}/questions/{questionId}")
+    public ResponseEntity<?> detachQuestion(@PathVariable Long id, @PathVariable Long questionId) {
+        try {
+            studyMaterialService.detachQuestionFromMaterial(id, questionId);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<?> getMaterialComments(@PathVariable Long id) {
+        return ResponseEntity.ok(studyMaterialService.getCardComments(id));
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<?> addMaterialComment(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        try {
+            Integer cardIndex = payload.get("cardIndex") != null ? Integer.valueOf(payload.get("cardIndex").toString()) : 0;
+            String cardHeading = payload.get("cardHeading") != null ? payload.get("cardHeading").toString() : null;
+            String contentMarkdown = payload.get("contentMarkdown") != null ? payload.get("contentMarkdown").toString() : null;
+            if (contentMarkdown == null || contentMarkdown.trim().isEmpty()) {
+                contentMarkdown = payload.get("content") != null ? payload.get("content").toString() : null;
+            }
+            return ResponseEntity.ok(studyMaterialService.addCardComment(id, cardIndex, cardHeading, contentMarkdown));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error guardando comentario: " + e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/comments/{commentId}")
+    public ResponseEntity<?> updateMaterialComment(@PathVariable Long id, @PathVariable Long commentId, @RequestBody Map<String, Object> payload) {
+        try {
+            String contentMarkdown = payload.get("contentMarkdown") != null ? payload.get("contentMarkdown").toString() : null;
+            if (contentMarkdown == null || contentMarkdown.trim().isEmpty()) {
+                contentMarkdown = payload.get("content") != null ? payload.get("content").toString() : null;
+            }
+            return ResponseEntity.ok(studyMaterialService.updateCardComment(id, commentId, contentMarkdown));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error actualizando comentario: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}/comments/{commentId}")
+    public ResponseEntity<?> deleteMaterialComment(@PathVariable Long id, @PathVariable Long commentId) {
+        try {
+            studyMaterialService.deleteCardComment(id, commentId);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/{id}/practice-info")
@@ -170,7 +253,9 @@ public class StudyMaterialController {
                     .body(new org.springframework.core.io.FileSystemResource(file));
         } else if (m.getContentText() != null && !m.getContentText().isEmpty()) {
             // Generación al vuelo para descarga de materiales sin archivo físico
-            boolean isMd = "MARKDOWN".equalsIgnoreCase(m.getSourceType()) || "MANUAL".equalsIgnoreCase(m.getSourceType());
+            boolean isMd = "MARKDOWN".equalsIgnoreCase(m.getSourceType())
+                    || "STUDY_CARDS".equalsIgnoreCase(m.getSourceType())
+                    || "MANUAL".equalsIgnoreCase(m.getSourceType());
             String ext = isMd ? ".md" : ".txt";
             String contentType = isMd ? "text/markdown; charset=UTF-8" : "text/plain; charset=UTF-8";
             String safeTitle = (m.getTitle() != null ? m.getTitle() : "documento")

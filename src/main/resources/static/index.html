@@ -364,6 +364,91 @@
             text-decoration: underline;
         }
 
+        /* 10b. Study Cards Presentation Typography & Callouts */
+        .study-card-body {
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            line-height: 1.75;
+        }
+        .study-card-body p {
+            margin-bottom: 0.9rem;
+        }
+        .study-card-body ul, .study-card-body ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+        .study-card-body li {
+            margin-bottom: 0.35rem;
+        }
+        .study-card-body strong {
+            color: #ffffff;
+            font-weight: 700;
+        }
+        .study-card-body em {
+            color: #93c5fd;
+        }
+        .study-card-body table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 1rem 0;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            border: 1px solid rgba(51, 65, 85, 0.85);
+            font-size: 0.85rem;
+        }
+        .study-card-body th {
+            background: rgba(30, 41, 59, 0.95);
+            color: #93c5fd;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+        }
+        .study-card-body td {
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid rgba(30, 41, 59, 0.9);
+            color: #cbd5e1;
+        }
+        .study-card-body tr:last-child td {
+            border-bottom: none;
+        }
+        .study-card-body tr:nth-child(even) td {
+            background: rgba(15, 23, 42, 0.45);
+        }
+        .study-card-answer-box {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.32), rgba(15, 23, 42, 0.75));
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            border-left: 4px solid #3b82f6;
+            border-radius: 0.85rem;
+            padding: 0.9rem 1.1rem;
+            margin-bottom: 0.95rem;
+            color: #f8fafc;
+            box-shadow: 0 4px 16px -4px rgba(37, 99, 235, 0.15);
+        }
+        .study-card-tip-box {
+            background: rgba(16, 185, 129, 0.09);
+            border: 1px solid rgba(16, 185, 129, 0.28);
+            border-left: 4px solid #10b981;
+            border-radius: 0.85rem;
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.9rem;
+            color: #d1fae5;
+            font-size: 0.88rem;
+        }
+        .study-card-warn-box {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            border-left: 4px solid #f59e0b;
+            border-radius: 0.85rem;
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.9rem;
+            color: #fef3c7;
+            font-size: 0.88rem;
+        }
+
         /* 11. Strict Accessibility Support: Prefers-Reduced-Motion */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -439,8 +524,12 @@
             <button onclick="switchTab('questions')" id="btn-tab-questions" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📚</span> Banco de Preguntas
             </button>
-            <button onclick="switchTab('materials')" id="btn-tab-materials" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+            <button onclick="openMaterialsSection('docs')" id="btn-tab-materials" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                 <span>📑</span> Materiales & PDFBox
+            </button>
+            <button onclick="openMaterialsSection('cards')" id="btn-tab-study-cards" class="tab-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                <span class="flex items-center gap-3"><span>🗂️</span> Fichas de Estudio</span>
+                <span id="badge-sidebar-cards-count" class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold px-2 py-0.5 rounded-full">1</span>
             </button>
         </aside>
 
@@ -935,200 +1024,509 @@
                 </div>
             </section>
 
-            <!-- SECTION: MATERIALS & PDFBOX -->
+            <!-- SECTION: MATERIALS & PDFBOX + FICHAS DE APRENDIZAJE -->
             <section id="view-materials" class="hidden space-y-5">
-                <!-- Clean Header with Primary Action -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/60 p-5 rounded-2xl border border-slate-700/70">
-                    <div>
-                        <div class="flex items-center gap-2.5">
-                            <h2 class="text-xl font-bold text-white tracking-tight">
-                                Biblioteca de Materiales
-                            </h2>
-                            <span id="mat-total-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                                0 docs
-                            </span>
-                        </div>
-                        <p class="text-xs text-slate-400 mt-1">
-                            Consulta tus apuntes, especificaciones FHIR y PDFs indexados, o entrena preguntas de cada documento.
-                        </p>
+                <!-- Top Segmented Apartado Switcher (Documentos & PDFBox vs Fichas de Aprendizaje) -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 shadow-md">
+                    <div class="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800/90">
+                        <button type="button" id="btn-mat-subview-docs" onclick="switchMaterialSubview('docs')" class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-2 cursor-pointer shadow-sm">
+                            <span>📑</span>
+                            <span>Documentos & PDFBox</span>
+                            <span id="mat-total-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-950/40 text-blue-100">0</span>
+                        </button>
+                        <button type="button" id="btn-mat-subview-cards" onclick="switchMaterialSubview('cards')" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-2 cursor-pointer">
+                            <span>🗂️</span>
+                            <span>Fichas de Aprendizaje</span>
+                            <span id="mat-cards-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">0</span>
+                        </button>
                     </div>
-                    <button id="btn-toggle-upload-drawer" type="button" onclick="toggleMaterialUploadDrawer()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0">
-                        <span id="btn-toggle-upload-icon" class="text-sm leading-none">＋</span>
-                        <span id="btn-toggle-upload-label">Añadir Material</span>
-                    </button>
+
+                    <div id="mat-top-actions-docs" class="flex items-center justify-end gap-2">
+                        <button id="btn-toggle-upload-drawer" type="button" onclick="toggleMaterialUploadDrawer()" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 shrink-0">
+                            <span id="btn-toggle-upload-icon" class="text-sm leading-none">＋</span>
+                            <span id="btn-toggle-upload-label">Añadir Documento</span>
+                        </button>
+                    </div>
+
+                    <div id="mat-top-actions-cards" class="hidden flex items-center justify-end gap-2">
+                        <button id="btn-toggle-cards-upload-drawer" type="button" onclick="toggleStudyCardsUploadDrawer()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/25 shrink-0">
+                            <span id="btn-toggle-cards-upload-icon" class="text-sm leading-none">＋</span>
+                            <span id="btn-toggle-cards-upload-label">Cargar Fichas Markdown</span>
+                        </button>
+                    </div>
                 </div>
 
-                <!-- Collapsible Upload & Import Drawer (Hidden by default to reduce visual clutter) -->
-                <div id="mat-upload-drawer" class="hidden bg-slate-800/95 p-5 rounded-2xl border border-blue-500/40 shadow-xl space-y-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
-                        <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-700/70">
-                            <button id="tab-mat-url-btn" type="button" onclick="switchMaterialInputMode('url')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer">
-                                🌐 Importar URL
-                            </button>
-                            <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
-                                📄 Subir PDF
-                            </button>
-                            <button id="tab-mat-md-btn" type="button" onclick="switchMaterialInputMode('markdown')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
-                                📝 Markdown (.md)
-                            </button>
+                <!-- ======================================================================= -->
+                <!-- SUBVIEW 1: DOCUMENTOS & PDFBOX                                          -->
+                <!-- ======================================================================= -->
+                <div id="mat-subview-docs" class="space-y-5">
+                    <!-- Collapsible Upload & Import Drawer (Hidden by default to reduce visual clutter) -->
+                    <div id="mat-upload-drawer" class="hidden bg-slate-800/95 p-5 rounded-2xl border border-blue-500/40 shadow-xl space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
+                            <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-700/70">
+                                <button id="tab-mat-url-btn" type="button" onclick="switchMaterialInputMode('url')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition flex items-center gap-1.5 cursor-pointer">
+                                    🌐 Importar URL
+                                </button>
+                                <button id="tab-mat-pdf-btn" type="button" onclick="switchMaterialInputMode('pdf')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                    📄 Subir PDF
+                                </button>
+                                <button id="tab-mat-md-btn" type="button" onclick="switchMaterialInputMode('markdown')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer">
+                                    📝 Markdown (.md)
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span id="mat-input-badge-hint" class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
+                                <button type="button" onclick="toggleMaterialUploadDrawer(false)" class="text-slate-400 hover:text-white text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-700 border border-slate-700 transition cursor-pointer">
+                                    ✕ Cerrar
+                                </button>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span id="mat-input-badge-hint" class="text-[11px] text-slate-400 font-mono hidden md:inline">HTML Web / PDF Remoto</span>
-                            <button type="button" onclick="toggleMaterialUploadDrawer(false)" class="text-slate-400 hover:text-white text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-700 border border-slate-700 transition cursor-pointer">
-                                ✕ Cerrar
-                            </button>
-                        </div>
-                    </div>
 
-                    <!-- Mode 1: URL Import Form -->
-                    <form id="import-url-form" onsubmit="importUrlMaterial(event)" class="space-y-4">
-                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-                            <div class="md:col-span-6">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">URL del Documento o Especificación HL7 FHIR:</label>
-                                <div class="flex gap-1.5">
-                                    <input id="import-mat-url" type="url" placeholder="https://www.hl7.org/fhir/references.html" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" required>
-                                    <button type="button" onclick="loadSampleFhirUrl()" title="Cargar URL de ejemplo" class="px-2.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-blue-300 transition whitespace-nowrap cursor-pointer">
-                                        Ejemplo
+                        <!-- Mode 1: URL Import Form -->
+                        <form id="import-url-form" onsubmit="importUrlMaterial(event)" class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                                <div class="md:col-span-6">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">URL del Documento o Especificación HL7 FHIR:</label>
+                                    <div class="flex gap-1.5">
+                                        <input id="import-mat-url" type="url" placeholder="https://www.hl7.org/fhir/references.html" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" required>
+                                        <button type="button" onclick="loadSampleFhirUrl()" title="Cargar URL de ejemplo" class="px-2.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-blue-300 transition whitespace-nowrap cursor-pointer">
+                                            Ejemplo
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="md:col-span-3">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
+                                    <select id="import-url-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="md:col-span-3">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Título (Opcional):</label>
+                                    <input id="import-url-title" type="text" placeholder="Ej: FHIR References" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 pt-1">
+                                <span class="text-[11px] text-slate-400">Extrae e indexa automáticamente el texto técnico de la página o PDF remoto.</span>
+                                <div class="flex items-center gap-3">
+                                    <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                        <span class="animate-spin">⏳</span> Procesando URL...
+                                    </span>
+                                    <button id="btn-import-url-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/25">
+                                        📥 Importar URL
                                     </button>
                                 </div>
                             </div>
-                            <div class="md:col-span-3">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
-                                <select id="import-url-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
-                                    <!-- Populated dynamically -->
-                                </select>
-                            </div>
-                            <div class="md:col-span-3">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título (Opcional):</label>
-                                <input id="import-url-title" type="text" placeholder="Ej: FHIR References" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                            </div>
-                        </div>
+                        </form>
 
-                        <div class="flex items-center justify-between gap-3 pt-1">
-                            <span class="text-[11px] text-slate-400">Extrae e indexa automáticamente el texto técnico de la página o PDF remoto.</span>
-                            <div class="flex items-center gap-3">
-                                <span id="import-url-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
-                                    <span class="animate-spin">⏳</span> Procesando URL...
+                        <!-- Mode 2: Local PDF Upload Form -->
+                        <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="hidden space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                                <div class="md:col-span-5">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo PDF Local:</label>
+                                    <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-rose-600 file:text-white hover:file:bg-rose-500 cursor-pointer">
+                                </div>
+                                <div class="md:col-span-3">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
+                                    <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="md:col-span-4">
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Título / Capítulo (Opcional):</label>
+                                    <input id="upload-title" type="text" placeholder="Ej: Módulo 2 - REST y Búsquedas" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 pt-1">
+                                <span class="text-[11px] text-slate-400">Apache PDFBox conservará el PDF original y extraerá su texto para búsquedas.</span>
+                                <button type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-md shadow-rose-600/25">
+                                    📄 Subir e Indexar PDF
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Mode 3: Markdown Material Form -->
+                        <form id="import-md-form" onsubmit="submitMarkdownMaterial(event)" class="hidden space-y-4">
+                            <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-2 rounded-xl border border-slate-700/60 gap-2">
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" id="md-mode-file-btn" onclick="toggleMarkdownSubmode('file')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer">
+                                        📁 Subir archivo .md
+                                    </button>
+                                    <button type="button" id="md-mode-text-btn" onclick="toggleMarkdownSubmode('text')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">
+                                        ✏️ Editor Markdown
+                                    </button>
+                                </div>
+                                <button type="button" onclick="loadSampleMarkdown()" class="text-xs text-blue-400 hover:underline cursor-pointer px-2">
+                                    💡 Cargar plantilla de ejemplo
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
+                                    <select id="import-md-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Título del Material:</label>
+                                    <input id="import-md-title" type="text" placeholder="Ej: Apuntes Resumen - Recursos FHIR R4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
+                                </div>
+                            </div>
+
+                            <!-- Submode A: File Input -->
+                            <div id="md-file-input-container">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo Markdown (.md, .markdown, .txt):</label>
+                                <input id="import-md-file" type="file" accept=".md,.markdown,.txt" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
+                            </div>
+
+                            <!-- Submode B: Textarea Editor -->
+                            <div id="md-text-input-container" class="hidden space-y-1">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Contenido Markdown:</label>
+                                <textarea id="import-md-text" rows="6" placeholder="# Guía Rápida FHIR R4&#10;&#10;## Paradigma RESTful&#10;FHIR utiliza las operaciones estándar HTTP..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
+                            </div>
+
+                            <div class="flex items-center justify-end gap-3 pt-1">
+                                <span id="import-md-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                    <span class="animate-spin">⏳</span> Guardando...
                                 </span>
-                                <button id="btn-import-url-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/25">
-                                    📥 Importar URL
+                                <button id="btn-import-md-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/25">
+                                    📝 Guardar Markdown
                                 </button>
                             </div>
-                        </div>
-                    </form>
-
-                    <!-- Mode 2: Local PDF Upload Form -->
-                    <form id="upload-pdf-form" onsubmit="uploadPdf(event)" class="hidden space-y-4">
-                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-                            <div class="md:col-span-5">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo PDF Local:</label>
-                                <input id="upload-file" type="file" accept=".pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-rose-600 file:text-white hover:file:bg-rose-500 cursor-pointer">
-                            </div>
-                            <div class="md:col-span-3">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
-                                <select id="upload-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                                    <!-- Populated dynamically -->
-                                </select>
-                            </div>
-                            <div class="md:col-span-4">
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título / Capítulo (Opcional):</label>
-                                <input id="upload-title" type="text" placeholder="Ej: Módulo 2 - REST y Búsquedas" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-between gap-3 pt-1">
-                            <span class="text-[11px] text-slate-400">Apache PDFBox conservará el PDF original y extraerá su texto para búsquedas.</span>
-                            <button type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-md shadow-rose-600/25">
-                                📄 Subir e Indexar PDF
-                            </button>
-                        </div>
-                    </form>
-
-                    <!-- Mode 3: Markdown Material Form -->
-                    <form id="import-md-form" onsubmit="submitMarkdownMaterial(event)" class="hidden space-y-4">
-                        <div class="flex flex-wrap items-center justify-between bg-slate-900/60 p-2 rounded-xl border border-slate-700/60 gap-2">
-                            <div class="flex items-center gap-1.5">
-                                <button type="button" id="md-mode-file-btn" onclick="toggleMarkdownSubmode('file')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white transition cursor-pointer">
-                                    📁 Subir archivo .md
-                                </button>
-                                <button type="button" id="md-mode-text-btn" onclick="toggleMarkdownSubmode('text')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">
-                                    ✏️ Editor Markdown
-                                </button>
-                            </div>
-                            <button type="button" onclick="loadSampleMarkdown()" class="text-xs text-blue-400 hover:underline cursor-pointer px-2">
-                                💡 Cargar plantilla de ejemplo
-                            </button>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Tema Asociado:</label>
-                                <select id="import-md-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
-                                    <!-- Populated dynamically -->
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-300 mb-1">Título del Material:</label>
-                                <input id="import-md-title" type="text" placeholder="Ej: Apuntes Resumen - Recursos FHIR R4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500" required>
-                            </div>
-                        </div>
-
-                        <!-- Submode A: File Input -->
-                        <div id="md-file-input-container">
-                            <label class="block text-xs font-semibold text-slate-300 mb-1">Archivo Markdown (.md, .markdown, .txt):</label>
-                            <input id="import-md-file" type="file" accept=".md,.markdown,.txt" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
-                        </div>
-
-                        <!-- Submode B: Textarea Editor -->
-                        <div id="md-text-input-container" class="hidden space-y-1">
-                            <label class="block text-xs font-semibold text-slate-300 mb-1">Contenido Markdown:</label>
-                            <textarea id="import-md-text" rows="6" placeholder="# Guía Rápida FHIR R4&#10;&#10;## Paradigma RESTful&#10;FHIR utiliza las operaciones estándar HTTP..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
-                        </div>
-
-                        <div class="flex items-center justify-end gap-3 pt-1">
-                            <span id="import-md-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
-                                <span class="animate-spin">⏳</span> Guardando...
-                            </span>
-                            <button id="btn-import-md-submit" type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/25">
-                                📝 Guardar Markdown
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Unified Filter & Search Toolbar -->
-                <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
-                    <!-- Quick Format Filter Pills -->
-                    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
-                        <button type="button" id="mat-filter-ALL" onclick="filterMaterialsByType('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white transition cursor-pointer shrink-0">
-                            Todos
-                        </button>
-                        <button type="button" id="mat-filter-PDF" onclick="filterMaterialsByType('PDF')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
-                            <span>📄</span> PDFs
-                        </button>
-                        <button type="button" id="mat-filter-MARKDOWN" onclick="filterMaterialsByType('MARKDOWN')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
-                            <span>📝</span> Markdown
-                        </button>
-                        <button type="button" id="mat-filter-URL" onclick="filterMaterialsByType('URL')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
-                            <span>🌐</span> Web / URL
-                        </button>
+                        </form>
                     </div>
 
-                    <!-- Search + Topic Filter -->
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 lg:max-w-xl">
-                        <div class="relative flex-1">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
-                            <input id="mat-search-input" type="text" placeholder="Buscar por título, #ID o contenido del documento..." oninput="filterMaterials()" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+                    <!-- Unified Filter & Search Toolbar -->
+                    <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60">
+                        <!-- Quick Format Filter Pills -->
+                        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+                            <button type="button" id="mat-filter-ALL" onclick="filterMaterialsByType('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white transition cursor-pointer shrink-0">
+                                Todos
+                            </button>
+                            <button type="button" id="mat-filter-PDF" onclick="filterMaterialsByType('PDF')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                                <span>📄</span> PDFs
+                            </button>
+                            <button type="button" id="mat-filter-MARKDOWN" onclick="filterMaterialsByType('MARKDOWN')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                                <span>📝</span> Markdown
+                            </button>
+                            <button type="button" id="mat-filter-URL" onclick="filterMaterialsByType('URL')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                                <span>🌐</span> Web / URL
+                            </button>
+                            <button type="button" id="mat-filter-STUDY_CARDS" onclick="filterMaterialsByType('STUDY_CARDS')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer shrink-0 flex items-center gap-1">
+                                <span>🗂️</span> Fichas
+                            </button>
                         </div>
-                        <select id="mat-topic-select" onchange="filterMaterials()" class="bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 sm:max-w-[220px]">
-                            <option value="">Todos los Temas</option>
-                        </select>
+
+                        <!-- Search + Topic Filter -->
+                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 lg:max-w-xl">
+                            <div class="relative flex-1">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
+                                <input id="mat-search-input" type="text" placeholder="Buscar por título, #ID o contenido del documento..." oninput="filterMaterials()" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+                            </div>
+                            <select id="mat-topic-select" onchange="filterMaterials()" class="bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 sm:max-w-[220px]">
+                                <option value="">Todos los Temas</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Clean 2-Column Document Grid -->
+                    <div id="materials-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <!-- Loaded dynamically -->
                     </div>
                 </div>
 
-                <!-- Clean 2-Column Document Grid -->
-                <div id="materials-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <!-- Loaded dynamically -->
+                <!-- ======================================================================= -->
+                <!-- SUBVIEW 2: FICHAS DE APRENDIZAJE (PRESENTACIÓN INTERACTIVA)             -->
+                <!-- ======================================================================= -->
+                <div id="mat-subview-cards" class="hidden space-y-5">
+                    <!-- Collapsible Upload / Editor Drawer for Study Cards Markdown -->
+                    <div id="cards-upload-drawer" class="hidden bg-slate-800/95 p-5 rounded-2xl border border-indigo-500/40 shadow-xl space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center text-sm">🗂️</span>
+                                <div>
+                                    <h3 class="text-sm font-bold text-white">Cargar Colección de Fichas en Markdown</h3>
+                                    <p class="text-[11px] text-slate-400">Usa <code class="text-indigo-300">## Título</code> para los capítulos y <code class="text-blue-300">### Ficha N · Título</code> para cada diapositiva.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="loadSampleStudyCardsMarkdown()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 transition cursor-pointer">
+                                    💡 Cargar Ejemplo FHIR (11 Fichas)
+                                </button>
+                                <button type="button" onclick="toggleStudyCardsUploadDrawer(false)" class="text-slate-400 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-700 border border-slate-700 transition cursor-pointer">
+                                    ✕ Cerrar
+                                </button>
+                            </div>
+                        </div>
+
+                        <form id="import-cards-form" onsubmit="submitStudyCardsMaterial(event)" class="space-y-4">
+                            <div class="flex flex-wrap items-center justify-between bg-slate-900/70 p-2 rounded-xl border border-slate-700/60 gap-2">
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" id="cards-mode-text-btn" onclick="toggleStudyCardsInputSubmode('text')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white transition cursor-pointer">
+                                        ✏️ Pegar / Escribir Markdown
+                                    </button>
+                                    <button type="button" id="cards-mode-file-btn" onclick="toggleStudyCardsInputSubmode('file')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">
+                                        📁 Subir Archivo .md
+                                    </button>
+                                </div>
+                                <span id="cards-live-preview-badge" class="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-slate-950 text-emerald-400 border border-slate-800">
+                                    Detectados: 0 capítulos (##) · 0 fichas (###)
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Tema del Syllabus Asociado:</label>
+                                    <select id="import-cards-topic-id" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" required>
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Título de la Colección de Fichas:</label>
+                                    <input id="import-cards-title" type="text" placeholder="Ej: 5 Formas de Mover Datos con FHIR" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" required>
+                                </div>
+                            </div>
+
+                            <!-- Submode Textarea (Default for quick paste) -->
+                            <div id="cards-text-input-container" class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Contenido Markdown de las Fichas:</label>
+                                <textarea id="import-cards-text" rows="9" oninput="updateStudyCardsLiveCount()" placeholder="---&#10;&#10;## 1. La idea general&#10;&#10;### Ficha 1 · ¿De qué trata esta página?&#10;**Respuesta:** Explica las **5 formas** que hay de mover datos con FHIR.&#10;💡 Es como elegir transporte: tren, avión, coche..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 leading-relaxed"></textarea>
+                            </div>
+
+                            <!-- Submode File Input -->
+                            <div id="cards-file-input-container" class="hidden space-y-1">
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">Selecciona archivo Markdown (.md, .markdown, .txt):</label>
+                                <input id="import-cards-file" type="file" accept=".md,.markdown,.txt" onchange="previewStudyCardsFile(event)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 pt-1">
+                                <span class="text-[11px] text-slate-400">Al guardar, las fichas se abrirán automáticamente en el visor de presentación.</span>
+                                <div class="flex items-center gap-3">
+                                    <span id="import-cards-status" class="hidden text-xs text-amber-400 font-semibold flex items-center gap-2">
+                                        <span class="animate-spin">⏳</span> Procesando fichas...
+                                    </span>
+                                    <button id="btn-import-cards-submit" type="submit" class="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/25">
+                                        🗂️ Guardar y Abrir Presentación
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Study Card Decks Selector Strip -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Colecciones de Fichas Disponibles</span>
+                            <span class="text-[11px] text-slate-500">Selecciona una colección para proyectar sus fichas</span>
+                        </div>
+                        <div id="study-cards-decks-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Interactive Presentation Stage -->
+                    <div id="study-cards-presentation-wrapper" class="hidden space-y-4">
+                        <!-- Active Deck Control Bar -->
+                        <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-md">
+                            <div class="flex items-start sm:items-center gap-3.5 min-w-0">
+                                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-xl shadow-md shadow-indigo-600/25 shrink-0">
+                                    🗂️
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 id="sc-active-deck-title" class="text-base font-extrabold text-white truncate">Título de las Fichas</h3>
+                                        <span id="sc-active-deck-id" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
+                                        <span id="sc-active-deck-topic" class="text-blue-400 font-semibold">Tema</span>
+                                        <span class="text-slate-600">•</span>
+                                        <span id="sc-active-deck-meta" class="font-mono text-[11px] text-slate-300">0 capítulos · 0 fichas</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Clear Action Hierarchy for Active Study Cards Deck -->
+                            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                                <button type="button" onclick="openAttachQuestionsModal(activeStudyCardDeckId)" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-2 cursor-pointer">
+                                    <span>➕ Adjuntar Preguntas</span>
+                                    <span id="sc-attached-q-badge" class="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-slate-800 text-slate-300">0</span>
+                                </button>
+                                <button type="button" onclick="openMaterialStatsModal(activeStudyCardDeckId)" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-700 text-sky-300 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+                                    <span>📊 Estadísticas</span>
+                                </button>
+                                <button type="button" id="sc-btn-start-test" onclick="handleStudyCardsTestClick()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold transition shadow-lg shadow-emerald-600/25 flex items-center gap-2 cursor-pointer">
+                                    <span>🎯 Hacer Prueba</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Main Presentation Split Layout: Chapters Sidebar (##) + Slide Stage (###) -->
+                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+                            <!-- Left Column: Chapters (##) & Cards (###) Index -->
+                            <div id="sc-chapters-sidebar" class="lg:col-span-4 bg-slate-900/80 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between max-h-[600px]">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3 shrink-0">
+                                    <div>
+                                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                                            <span>📚</span> Estructura de Capítulos
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mt-0.5">Haz clic en cualquier ficha para saltar</p>
+                                    </div>
+                                    <span id="sc-seen-progress-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                                        1 / 1
+                                    </span>
+                                </div>
+
+                                <div id="sc-chapters-tree" class="flex-1 overflow-y-auto space-y-3 pr-1">
+                                    <!-- Populated dynamically with ## Chapters and ### Cards -->
+                                </div>
+
+                                <div class="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+                                    <span>⌨️ Usa las flechas <strong class="text-slate-300">←</strong> y <strong class="text-slate-300">→</strong></span>
+                                    <button type="button" onclick="openViewMaterialModal(activeStudyCardDeckId)" class="text-slate-400 hover:text-white underline cursor-pointer">
+                                        Ver Markdown completo
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: The Presentation Slide (### Ficha) -->
+                            <div id="sc-slide-column" class="lg:col-span-8 flex flex-col">
+                                <div id="sc-slide-card" class="flex-1 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 rounded-2xl border border-slate-700/80 shadow-2xl flex flex-col justify-between overflow-hidden min-h-[480px]">
+                                    <!-- Slide Top Header Bar -->
+                                    <div class="px-6 py-3.5 bg-slate-950/70 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <span class="w-2 h-2 rounded-full bg-indigo-400 shrink-0"></span>
+                                            <span id="sc-slide-chapter-badge" class="text-xs font-bold uppercase tracking-wider text-indigo-300 truncate">
+                                                CAPÍTULO 1
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center gap-2.5 shrink-0">
+                                            <span id="sc-slide-counter" class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-mono font-bold text-white">
+                                                Ficha 1 de 1
+                                            </span>
+                                            <button type="button" id="sc-btn-focus" onclick="toggleStudyCardsFocusMode()" title="Alternar Modo Foco (ancho completo)" class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer">
+                                                ⛶ Ampliar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Slide Center Stage -->
+                                    <div id="sc-slide-stage-content" class="flex-1 p-6 md:p-8 flex flex-col justify-center overflow-y-auto">
+                                        <div class="max-w-3xl w-full mx-auto space-y-5">
+                                            <!-- Ficha Number Pill + Question/Concept Title -->
+                                            <div class="space-y-2">
+                                                <div id="sc-slide-ficha-pill-row" class="flex items-center gap-2">
+                                                    <span id="sc-slide-ficha-pill" class="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                                        FICHA 1
+                                                    </span>
+                                                </div>
+                                                <h2 id="sc-slide-title" class="text-xl md:text-2xl font-extrabold text-white tracking-tight leading-snug">
+                                                    Título de la Ficha
+                                                </h2>
+                                            </div>
+
+                                            <!-- Rendered Ficha Body -->
+                                            <div id="sc-slide-body" class="study-card-body">
+                                                <!-- Populated dynamically -->
+                                            </div>
+
+                                            <!-- Comentarios y Notas Adicionales de la Ficha (Texto / Markdown) -->
+                                            <div id="sc-slide-comments-section" class="pt-5 mt-6 border-t border-slate-800/90 space-y-3.5">
+                                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-sm">💬</span>
+                                                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                                                            Comentarios y Notas de Ampliación
+                                                        </h4>
+                                                        <span id="sc-slide-comments-count" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                                            0
+                                                        </span>
+                                                    </div>
+                                                    <button type="button" id="sc-btn-toggle-comment-form" onclick="toggleStudyCardCommentComposer()" class="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+                                                        <span id="sc-btn-toggle-comment-icon">➕</span>
+                                                        <span id="sc-btn-toggle-comment-label">Añadir Comentario</span>
+                                                    </button>
+                                                </div>
+
+                                                <!-- Lista de comentarios de la ficha actual -->
+                                                <div id="sc-slide-comments-list" class="space-y-2.5">
+                                                    <!-- Populated dynamically -->
+                                                </div>
+
+                                                <!-- Compositor para nuevo comentario (Texto o Markdown) -->
+                                                <div id="sc-comment-composer-box" class="hidden bg-slate-950/90 border border-indigo-500/40 rounded-2xl p-4 space-y-3 shadow-xl">
+                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                                        <span class="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                                                            <span>✍️</span> Nuevo comentario para esta ficha <span class="text-slate-500 font-normal">(admite texto o Markdown)</span>
+                                                        </span>
+                                                        <!-- Barra rápida de inserción Markdown -->
+                                                        <div class="flex flex-wrap items-center gap-1">
+                                                            <button type="button" onclick="insertCardCommentSnippet('**', '**', 'texto en negrita')" title="Negrita" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-mono font-bold cursor-pointer transition">**B**</button>
+                                                            <button type="button" onclick="insertCardCommentSnippet('*', '*', 'cursiva')" title="Cursiva" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-mono italic cursor-pointer transition">*I*</button>
+                                                            <button type="button" onclick="insertCardCommentSnippet('`', '`', 'código')" title="Código inline" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-800 text-[10px] font-mono cursor-pointer transition">`code`</button>
+                                                            <button type="button" onclick="insertCardCommentSnippet('💡 ', '', 'Idea clave o recordatorio...')" title="Bloque de consejo 💡" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-200 border border-slate-800 text-[10px] cursor-pointer transition">💡 Tip</button>
+                                                            <button type="button" onclick="insertCardCommentSnippet('⚠️ ', '', 'Punto crítico a tener en cuenta...')" title="Bloque de advertencia ⚠️" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-rose-300 border border-slate-800 text-[10px] cursor-pointer transition">⚠️ Aviso</button>
+                                                            <button type="button" onclick="insertCardCommentSnippet('- ', '', 'Elemento de lista')" title="Lista con viñetas" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] cursor-pointer transition">• Lista</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <textarea id="sc-comment-textarea" rows="4" oninput="updateCardCommentLivePreview()" placeholder="Escribe aquí tu comentario, ejemplo práctico, nota de estudio o formato Markdown (negritas, listas, tablas, 💡 consejos...)..." class="w-full bg-slate-900 border border-slate-700/90 rounded-xl p-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 leading-relaxed"></textarea>
+
+                                                    <!-- Vista previa opcional en vivo -->
+                                                    <div id="sc-comment-preview-wrapper" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-1.5">
+                                                        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">👁️ Vista previa del comentario:</div>
+                                                        <div id="sc-comment-preview-body" class="study-card-body text-xs"></div>
+                                                    </div>
+
+                                                    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                                        <div class="flex items-center gap-3">
+                                                            <button type="button" id="sc-btn-comment-preview" onclick="toggleCardCommentPreview()" class="text-[11px] text-slate-400 hover:text-indigo-300 font-semibold cursor-pointer transition">
+                                                                👁️ Mostrar vista previa
+                                                            </button>
+                                                            <span class="text-[10px] text-slate-500 hidden sm:inline">Atajo: <strong class="text-slate-400">Ctrl + Enter</strong> para guardar</span>
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <button type="button" onclick="toggleStudyCardCommentComposer(false)" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer">
+                                                                Cancelar
+                                                            </button>
+                                                            <button type="button" id="sc-btn-save-comment" onclick="submitNewStudyCardComment()" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-md shadow-indigo-600/25 cursor-pointer flex items-center gap-1.5">
+                                                                <span>💾</span>
+                                                                <span>Guardar Comentario</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Slide Bottom Navigation Footer -->
+                                    <div class="px-6 py-4 bg-slate-950/90 border-t border-slate-800/90 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                        <button type="button" id="sc-btn-prev" onclick="prevStudyCard()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer">
+                                            <span>←</span>
+                                            <span>Ficha Anterior</span>
+                                        </button>
+
+                                        <!-- Interactive Progress Segments -->
+                                        <div id="sc-progress-segments" class="flex items-center justify-center gap-1.5 flex-wrap max-w-md">
+                                            <!-- Populated dynamically -->
+                                        </div>
+
+                                        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                            <button type="button" id="sc-btn-finish-test" onclick="handleStudyCardsTestClick()" class="hidden px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/25 items-center gap-1.5 cursor-pointer">
+                                                <span>🎯 Hacer Prueba</span>
+                                            </button>
+                                            <button type="button" id="sc-btn-next" onclick="nextStudyCard()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold transition shadow-md shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer">
+                                                <span>Ficha Siguiente</span>
+                                                <span>→</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -1677,6 +2075,149 @@
         </div>
     </div>
 
+    <!-- Modal: Adjuntar y Configurar Preguntas para Fichas de Aprendizaje -->
+    <div id="modal-attach-questions" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-3 md:p-6">
+        <div class="bg-slate-900 border border-slate-700/90 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl modal-box">
+            <!-- Header -->
+            <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-4 shrink-0">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-11 h-11 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center text-xl shrink-0">
+                        ➕
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span id="attach-q-mat-id-badge" class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">ID #1</span>
+                            <h3 id="attach-q-mat-title" class="text-base font-bold text-white truncate">Configurar Preguntas de las Fichas</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            Adjunta preguntas del banco, importa un JSON o crea nuevas preguntas para activar la prueba de estas fichas.
+                        </p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('modal-attach-questions')" class="text-slate-400 hover:text-white text-xl font-bold p-1 cursor-pointer">✕</button>
+            </div>
+
+            <!-- Segmented Tabs inside Modal -->
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 shrink-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button type="button" id="attach-tab-linked-btn" onclick="switchAttachQuestionsTab('linked')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white transition cursor-pointer flex items-center gap-1.5">
+                        <span>🎯 Preguntas Adjuntas</span>
+                        <span id="attach-tab-linked-count" class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-950/40 text-indigo-100">0</span>
+                    </button>
+                    <button type="button" id="attach-tab-bank-btn" onclick="switchAttachQuestionsTab('bank')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer">
+                        📚 Vincular del Banco
+                    </button>
+                    <button type="button" id="attach-tab-json-btn" onclick="switchAttachQuestionsTab('json')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer">
+                        📥 Importar JSON
+                    </button>
+                    <button type="button" id="attach-tab-create-btn" onclick="switchAttachQuestionsTab('create')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer">
+                        ✍️ Crear Pregunta
+                    </button>
+                </div>
+
+                <button type="button" id="btn-attach-ai-gen" onclick="generateQuestionFromAttachModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition cursor-pointer flex items-center gap-1.5">
+                    ✨ Generar 1 con IA
+                </button>
+            </div>
+
+            <!-- Tab Content Area -->
+            <div class="flex-1 overflow-y-auto pr-1 space-y-4">
+                <!-- TAB 1: Linked Questions List -->
+                <div id="attach-panel-linked" class="space-y-3">
+                    <div id="attach-linked-list" class="space-y-2.5">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- TAB 2: Link Existing Questions from Question Bank -->
+                <div id="attach-panel-bank" class="hidden space-y-3">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
+                            <input id="attach-bank-search" type="text" oninput="renderAttachBankQuestionsList()" placeholder="Buscar preguntas en el banco por enunciado o código..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <button type="button" onclick="attachSelectedBankQuestions()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shrink-0">
+                            🔗 Adjuntar Seleccionadas
+                        </button>
+                    </div>
+                    <div id="attach-bank-list" class="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- TAB 3: Import JSON directly to this Study Cards Deck -->
+                <div id="attach-panel-json" class="hidden space-y-3">
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span>Las preguntas del JSON se vincularán automáticamente a esta colección de fichas.</span>
+                        <button type="button" onclick="loadSampleAttachJson()" class="text-indigo-400 hover:underline font-semibold cursor-pointer">
+                            💡 Cargar plantilla JSON
+                        </button>
+                    </div>
+                    <textarea id="attach-json-textarea" rows="10" placeholder='[&#10;  {&#10;    "stem": "¿Qué paradigma FHIR se asemeja a enviar un informe cerrado y firmado?",&#10;    "explanation": "Los Documentos FHIR representan informes clínicos cerrados.",&#10;    "difficulty": 2,&#10;    "options": [&#10;      { "optionLabel": "A", "optionText": "Documentos (Documents)", "correct": true },&#10;      { "optionLabel": "B", "optionText": "API REST", "correct": false }&#10;    ]&#10;  }&#10;]' class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-indigo-500"></textarea>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="submitAttachJsonQuestions()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-indigo-600/25">
+                            📥 Importar y Adjuntar a las Fichas
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TAB 4: Create Single Question directly linked to this Study Cards Deck -->
+                <div id="attach-panel-create" class="hidden space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Enunciado de la Pregunta (sobre las fichas):</label>
+                        <textarea id="attach-new-q-stem" rows="2" placeholder="Ej: Según la Ficha 9, ¿cuándo es buena idea usar Mensajes en FHIR?" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <div class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                            <input type="radio" name="attach-new-q-correct" value="A" checked>
+                            <span class="font-bold text-indigo-400">A)</span>
+                            <input id="attach-new-q-opt-a" type="text" placeholder="Opción A (Correcta por defecto)" class="flex-1 bg-slate-900 border border-slate-700 rounded p-1.5 text-white">
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                            <input type="radio" name="attach-new-q-correct" value="B">
+                            <span class="font-bold text-indigo-400">B)</span>
+                            <input id="attach-new-q-opt-b" type="text" placeholder="Opción B" class="flex-1 bg-slate-900 border border-slate-700 rounded p-1.5 text-white">
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                            <input type="radio" name="attach-new-q-correct" value="C">
+                            <span class="font-bold text-indigo-400">C)</span>
+                            <input id="attach-new-q-opt-c" type="text" placeholder="Opción C (Opcional)" class="flex-1 bg-slate-900 border border-slate-700 rounded p-1.5 text-white">
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                            <input type="radio" name="attach-new-q-correct" value="D">
+                            <span class="font-bold text-indigo-400">D)</span>
+                            <input id="attach-new-q-opt-d" type="text" placeholder="Opción D (Opcional)" class="flex-1 bg-slate-900 border border-slate-700 rounded p-1.5 text-white">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Explicación / Referencia a la Ficha:</label>
+                        <textarea id="attach-new-q-explanation" rows="2" placeholder="Ej: Como explica la Ficha 9, los mensajes son ideales entre organizaciones dispares con bajo nivel de integración." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white"></textarea>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="submitCreateAttachedQuestion()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-emerald-600/25">
+                            ✍️ Guardar y Adjuntar Pregunta
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between pt-3 border-t border-slate-800 shrink-0">
+                <span class="text-[11px] text-slate-400">
+                    💡 Cuando haya al menos 1 pregunta adjunta, el botón <strong>"🎯 Hacer Prueba"</strong> quedará habilitado en las fichas.
+                </span>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="attach-modal-btn-test" onclick="closeModal('modal-attach-questions'); handleStudyCardsTestClick();" class="hidden px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
+                        🎯 Hacer Prueba Ahora
+                    </button>
+                    <button type="button" onclick="closeModal('modal-attach-questions')" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Confirmación Elegante (Reemplazo no bloqueante de window.confirm) -->
     <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
@@ -1707,6 +2248,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.12"></script>
+    <script src="/app.js?v=2.0.16"></script>
 </body>
 </html>

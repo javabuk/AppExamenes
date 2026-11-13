@@ -27,6 +27,7 @@ class StudyMaterialServiceTest {
     private SpacedRepetitionService srsService;
     private ExamAttemptRepository attemptRepository;
     private ExamAttemptAnswerRepository attemptAnswerRepository;
+    private StudyCardCommentRepository studyCardCommentRepository;
     private StudyMaterialService studyMaterialService;
 
     @BeforeEach
@@ -38,6 +39,7 @@ class StudyMaterialServiceTest {
         srsService = Mockito.mock(SpacedRepetitionService.class);
         attemptRepository = Mockito.mock(ExamAttemptRepository.class);
         attemptAnswerRepository = Mockito.mock(ExamAttemptAnswerRepository.class);
+        studyCardCommentRepository = Mockito.mock(StudyCardCommentRepository.class);
 
         studyMaterialService = new StudyMaterialService(
                 studyMaterialRepository,
@@ -46,7 +48,8 @@ class StudyMaterialServiceTest {
                 questionOptionRepository,
                 srsService,
                 attemptRepository,
-                attemptAnswerRepository
+                attemptAnswerRepository,
+                studyCardCommentRepository
         );
     }
 

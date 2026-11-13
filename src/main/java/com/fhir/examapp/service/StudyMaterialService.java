@@ -4,6 +4,7 @@ import com.fhir.examapp.domain.ExamAttempt;
 import com.fhir.examapp.domain.ExamAttemptAnswer;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
+import com.fhir.examapp.domain.StudyCardComment;
 import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.domain.SyllabusTopic;
 import com.fhir.examapp.dto.MaterialEvolutionPointDTO;
@@ -13,6 +14,7 @@ import com.fhir.examapp.repository.ExamAttemptAnswerRepository;
 import com.fhir.examapp.repository.ExamAttemptRepository;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
+import com.fhir.examapp.repository.StudyCardCommentRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
 import org.apache.pdfbox.Loader;
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
@@ -42,6 +45,7 @@ public class StudyMaterialService {
     private final SpacedRepetitionService srsService;
     private final ExamAttemptRepository attemptRepository;
     private final ExamAttemptAnswerRepository attemptAnswerRepository;
+    private final StudyCardCommentRepository studyCardCommentRepository;
 
     public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
                                 SyllabusTopicRepository syllabusTopicRepository,
@@ -49,7 +53,8 @@ public class StudyMaterialService {
                                 QuestionOptionRepository questionOptionRepository,
                                 SpacedRepetitionService srsService,
                                 ExamAttemptRepository attemptRepository,
-                                ExamAttemptAnswerRepository attemptAnswerRepository) {
+                                ExamAttemptAnswerRepository attemptAnswerRepository,
+                                StudyCardCommentRepository studyCardCommentRepository) {
         this.studyMaterialRepository = studyMaterialRepository;
         this.syllabusTopicRepository = syllabusTopicRepository;
         this.questionRepository = questionRepository;
@@ -57,6 +62,7 @@ public class StudyMaterialService {
         this.srsService = srsService;
         this.attemptRepository = attemptRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
+        this.studyCardCommentRepository = studyCardCommentRepository;
     }
 
     /**
@@ -216,9 +222,13 @@ public class StudyMaterialService {
     }
 
     /**
-     * Guarda e indexa un archivo de apuntes en formato Markdown (.md, .markdown, .txt).
+     * Guarda e indexa un archivo de apuntes o fichas en formato Markdown (.md, .markdown, .txt).
      */
     public StudyMaterial saveMarkdownFile(MultipartFile file, Long topicId, String customTitle) throws IOException {
+        return saveMarkdownFile(file, topicId, customTitle, null);
+    }
+
+    public StudyMaterial saveMarkdownFile(MultipartFile file, Long topicId, String customTitle, String requestedSourceType) throws IOException {
         SyllabusTopic topic = syllabusTopicRepository.findById(topicId)
                 .orElseThrow(() -> new IllegalArgumentException("Tema de temario no encontrado: " + topicId));
 
@@ -229,6 +239,11 @@ public class StudyMaterialService {
         String contentText = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
         if (contentText.isBlank()) {
             contentText = "(Archivo Markdown vacío)";
+        }
+
+        String resolvedSourceType = "MARKDOWN";
+        if ("STUDY_CARDS".equalsIgnoreCase(requestedSourceType) || contentText.contains("### Ficha")) {
+            resolvedSourceType = "STUDY_CARDS";
         }
 
         // Guardar archivo físico en ./data/materials/
@@ -246,31 +261,40 @@ public class StudyMaterialService {
 
         StudyMaterial material = new StudyMaterial(
                 topic,
-                "MARKDOWN",
+                resolvedSourceType,
                 title,
                 contentText,
                 safeOriginal
         );
         material.setFilePath(targetFile.getPath());
 
-        return studyMaterialRepository.save(material);
+        return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     /**
-     * Guarda e indexa contenido de apuntes escrito directamente en formato Markdown.
+     * Guarda e indexa contenido de apuntes o fichas escrito directamente en formato Markdown.
      */
     public StudyMaterial saveMarkdownText(Long topicId, String title, String markdownText) throws IOException {
+        return saveMarkdownText(topicId, title, markdownText, null);
+    }
+
+    public StudyMaterial saveMarkdownText(Long topicId, String title, String markdownText, String requestedSourceType) throws IOException {
         SyllabusTopic topic = syllabusTopicRepository.findById(topicId)
                 .orElseThrow(() -> new IllegalArgumentException("Tema de temario no encontrado: " + topicId));
 
         if (title == null || title.trim().isEmpty()) {
-            title = "Apuntes Markdown";
+            title = "STUDY_CARDS".equalsIgnoreCase(requestedSourceType) ? "Fichas de Aprendizaje FHIR" : "Apuntes Markdown";
         } else {
             title = title.trim();
         }
 
         if (markdownText == null || markdownText.trim().isEmpty()) {
             throw new IllegalArgumentException("El contenido Markdown no puede estar vacío.");
+        }
+
+        String resolvedSourceType = "MARKDOWN";
+        if ("STUDY_CARDS".equalsIgnoreCase(requestedSourceType) || markdownText.contains("### Ficha")) {
+            resolvedSourceType = "STUDY_CARDS";
         }
 
         // Guardar archivo físico .md en ./data/materials/
@@ -288,14 +312,14 @@ public class StudyMaterialService {
 
         StudyMaterial material = new StudyMaterial(
                 topic,
-                "MARKDOWN",
+                resolvedSourceType,
                 title,
                 markdownText,
                 safeTitle
         );
         material.setFilePath(targetFile.getPath());
 
-        return studyMaterialRepository.save(material);
+        return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     public StudyMaterial createManualNote(Long topicId, String title, String content, String referenceUrl) {
@@ -309,34 +333,324 @@ public class StudyMaterialService {
                 content,
                 referenceUrl
         );
-        return studyMaterialRepository.save(material);
+        return enrichMaterial(studyMaterialRepository.save(material));
+    }
+
+    private StudyMaterial enrichMaterial(StudyMaterial m) {
+        if (m != null && m.getId() != null) {
+            m.setLinkedQuestionsCount(questionRepository.countByMaterialIdAndVerifiedTrue(m.getId()));
+            m.setCommentsCount(studyCardCommentRepository.countByMaterialId(m.getId()));
+        }
+        return m;
+    }
+
+    private List<StudyMaterial> enrichMaterials(List<StudyMaterial> list) {
+        if (list != null) {
+            for (StudyMaterial m : list) {
+                enrichMaterial(m);
+            }
+        }
+        return list;
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> getMaterialsByTopic(Long topicId) {
-        return studyMaterialRepository.findByTopicId(topicId);
+        return enrichMaterials(studyMaterialRepository.findByTopicId(topicId));
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> searchMaterials(String query) {
         if (query == null || query.trim().isEmpty()) {
-            return studyMaterialRepository.findAll();
+            return enrichMaterials(studyMaterialRepository.findAll());
         }
-        return studyMaterialRepository.searchMaterials(query.trim());
+        return enrichMaterials(studyMaterialRepository.searchMaterials(query.trim()));
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> getAllMaterials() {
-        return studyMaterialRepository.findAll();
+        return enrichMaterials(studyMaterialRepository.findAll());
     }
 
     @Transactional(readOnly = true)
     public StudyMaterial getMaterialById(Long id) {
-        return studyMaterialRepository.findById(id).orElse(null);
+        return enrichMaterial(studyMaterialRepository.findById(id).orElse(null));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Question> getLinkedQuestions(Long materialId) {
+        return questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
+    }
+
+    public int attachQuestionsToMaterial(Long materialId, List<Long> questionIds) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + materialId));
+        if (questionIds == null || questionIds.isEmpty()) return 0;
+
+        int attached = 0;
+        for (Long qId : questionIds) {
+            if (qId == null) continue;
+            Question q = questionRepository.findById(qId).orElse(null);
+            if (q != null) {
+                q.setMaterial(material);
+                questionRepository.save(q);
+                attached++;
+            }
+        }
+        return attached;
+    }
+
+    public void detachQuestionFromMaterial(Long materialId, Long questionId) {
+        Question q = questionRepository.findById(questionId)
+                .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + questionId));
+        if (q.getMaterial() != null && materialId.equals(q.getMaterial().getId())) {
+            q.setMaterial(null);
+            questionRepository.save(q);
+        }
+    }
+
+    // =================== COMENTARIOS Y NOTAS EN FICHAS DE ESTUDIO ===================
+
+    @Transactional(readOnly = true)
+    public List<StudyCardComment> getCardComments(Long materialId) {
+        return studyCardCommentRepository.findByMaterialIdOrderByCardIndexAscIdAsc(materialId);
+    }
+
+    public StudyCardComment addCardComment(Long materialId, Integer cardIndex, String cardHeading, String contentMarkdown) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Colección de fichas no encontrada: " + materialId));
+
+        if (contentMarkdown == null || contentMarkdown.trim().isEmpty()) {
+            throw new IllegalArgumentException("El texto del comentario no puede estar vacío.");
+        }
+
+        int resolvedIndex = cardIndex != null && cardIndex >= 0 ? cardIndex : 0;
+        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+
+        StudyCardComment comment = new StudyCardComment(
+                material,
+                resolvedIndex,
+                cardHeading != null ? cardHeading.trim() : ("Ficha " + (resolvedIndex + 1)),
+                contentMarkdown.trim(),
+                now
+        );
+        return studyCardCommentRepository.save(comment);
+    }
+
+    public StudyCardComment updateCardComment(Long materialId, Long commentId, String contentMarkdown) {
+        StudyCardComment comment = studyCardCommentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comentario no encontrado: " + commentId));
+
+        if (comment.getMaterial() == null || !materialId.equals(comment.getMaterial().getId())) {
+            throw new IllegalArgumentException("El comentario no pertenece a esta colección de fichas.");
+        }
+        if (contentMarkdown == null || contentMarkdown.trim().isEmpty()) {
+            throw new IllegalArgumentException("El texto del comentario no puede estar vacío.");
+        }
+
+        comment.setContentMarkdown(contentMarkdown.trim());
+        comment.setUpdatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+        return studyCardCommentRepository.save(comment);
+    }
+
+    public void deleteCardComment(Long materialId, Long commentId) {
+        StudyCardComment comment = studyCardCommentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comentario no encontrado: " + commentId));
+
+        if (comment.getMaterial() != null && materialId.equals(comment.getMaterial().getId())) {
+            studyCardCommentRepository.delete(comment);
+        }
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void ensureDefaultStudyCardsDeck() {
+        try {
+            List<StudyMaterial> existing = studyMaterialRepository.findAll();
+            boolean hasStudyCards = existing.stream().anyMatch(m -> "STUDY_CARDS".equalsIgnoreCase(m.getSourceType()));
+            if (hasStudyCards) return;
+
+            List<SyllabusTopic> topics = syllabusTopicRepository.findAll();
+            if (topics.isEmpty()) return;
+
+            SyllabusTopic targetTopic = topics.get(0);
+            for (SyllabusTopic t : topics) {
+                String n = (t.getName() != null ? t.getName() : "").toLowerCase();
+                String c = (t.getCode() != null ? t.getCode() : "").toLowerCase();
+                if (n.contains("paradigma") || n.contains("rest") || n.contains("fundamento") || c.contains("rest") || c.contains("found")) {
+                    targetTopic = t;
+                    break;
+                }
+            }
+
+            String defaultCardsMd = """
+---
+
+## 1. La idea general
+
+### Ficha 1 · ¿De qué trata esta página?
+**Respuesta:** Explica las **5 formas** que hay de mover datos con FHIR.
+💡 Es como elegir transporte: tren, avión, coche… Cada uno sirve mejor según el viaje.
+
+Las cinco formas:
+1. **API REST**
+2. **Mensajes** (*Messaging*)
+3. **Documentos** (*Documents*)
+4. **Servicios** (*Services / SOA*)
+5. **Base de datos** (*Persistent store*)
+
+### Ficha 2 · ¿Hay que elegir solo una?
+**Respuesta:** **No.** Se pueden usar varias a la vez. La mejor depende de **cómo está montado tu sistema**.
+⚠️ Ninguna "arregla" los defectos de otra. Mensajes no sustituye a REST ni REST a mensajes: son distintas.
+
+### Ficha 3 · Resumen en una tabla
+| Forma | Se parece a… | Se usa cuando… |
+|---|---|---|
+| REST | Ir a una ventanilla y pedir o dejar datos al momento | Quieres consultar o guardar datos concretos |
+| Mensajes | Enviar una carta a otra organización | Las organizaciones casi no comparten procesos |
+| Documentos | Enviar un informe cerrado y firmado | Quieres que lo lea una persona tal cual se emitió |
+| Servicios | Una empresa con departamentos que se piden cosas | Tu arquitectura es por servicios |
+| Base de datos | El archivador donde guardas todo | Quieres guardar los datos ya en formato FHIR |
+
+---
+
+## 2. API REST
+
+### Ficha 4 · ¿Qué es?
+**Respuesta:** Una forma de hablar entre un **cliente** y un **servidor**. El cliente puede **crear, leer, modificar, borrar, buscar y ejecutar operaciones**.
+💡 Sirve para **enviar** datos (*push*) y para **pedirlos** (*pull*).
+
+### Ficha 5 · ¿Qué más incluye?
+**Respuesta:** Permite trabajo **asíncrono** (pides algo y la respuesta llega después) y consultas con **GraphQL**.
+
+### Ficha 6 · 🧩 Caso de uso: la app del paciente
+*Una app móvil muestra al paciente sus alergias.*
+**Respuesta:** **REST.** La app pregunta "dame las alergias del paciente 123" y el servidor contesta al momento.
+Se suele añadir **SMART App Launch** para controlar quién entra.
+
+### Ficha 7 · 🧩 Caso de uso: dos sistemas que ya se conocen
+*Dos hospitales de la misma red, con acuerdos firmados, comparten datos.*
+**Respuesta:** **REST.** La página dice que va bien cuando ya hay **acuerdos de gobernanza** (reglas pactadas entre los participantes).
+
+---
+
+## 3. Mensajes (*Messaging*)
+
+### Ficha 8 · ¿Qué es?
+**Respuesta:** Enviar **mensajes** de un sistema a otro, que se encaminan hasta su destino.
+💡 Como mandar una carta: tú envías, no necesitas ir a la ventanilla del otro.
+Puede funcionar **encima de REST** o con otra tecnología de mensajería.
+
+### Ficha 9 · 🎯 ¿Cuándo es buena idea?
+**Respuesta:** Cuando se intercambia entre **organizaciones muy distintas** que **casi no comparten procesos**.
+Frase de la página: puede ser *"más adecuado para el intercambio entre organizaciones dispares con bajo nivel de integración de procesos"*.
+
+### Ficha 10 · 🧩 Caso de uso: laboratorio externo
+*Un laboratorio de otra empresa avisa a varios hospitales de que hay un resultado. Cada hospital usa un sistema diferente.*
+**Respuesta:** **Mensajes.** El laboratorio envía el mensaje y no necesita conocer cómo funciona cada hospital por dentro.
+
+### Ficha 11 · 🧩 Para ti: HL7 v2 y HealthConnect
+*Tú ya mueves ADT u ORU con un motor de integración.*
+**Respuesta:** Los mensajes de FHIR son **parecidos en idea**: un evento sale de un sistema y llega a otros. Es la forma más cercana a lo que ya conoces de HL7 v2.
+
+---
+""".trim();
+
+            StudyMaterial savedDeck = saveMarkdownText(
+                    targetTopic.getId(),
+                    "5 Formas de Mover Datos con FHIR (Paradigmas de Intercambio)",
+                    defaultCardsMd,
+                    "STUDY_CARDS"
+            );
+
+            // Crear 4 preguntas de autoevaluación directamente vinculadas a este mazo de fichas
+            createDefaultCardQuestion(savedDeck, targetTopic,
+                    "Según las fichas de paradigmas de intercambio en FHIR, ¿cuál es el enfoque más adecuado cuando una app móvil necesita consultar en tiempo real las alergias de un paciente concreto?",
+                    "GET [base]/AllergyIntolerance?patient=Patient/123",
+                    "Como detalla la Ficha 6, una app móvil que consulta datos puntuales al momento utiliza el paradigma API REST, habitualmente protegido mediante SMART App Launch.",
+                    "A", "API REST (acompañado habitualmente de SMART App Launch).", "Correcto: la app realiza una consulta síncrona puntual sobre el servidor FHIR.",
+                    "B", "Documentos cerrados y firmados exclusivamente.", "Los documentos están pensados para informes clínicos cerrados e inmutables, no para consultas granulares bajo demanda.",
+                    "C", "Mensajería por lotes sin respuesta.", "La app requiere los datos del paciente al momento.",
+                    "D", "Obligar a elegir un único paradigma en toda la organización.", "Como indica la Ficha 2, se pueden combinar varios paradigmas simultáneamente."
+            );
+
+            createDefaultCardQuestion(savedDeck, targetTopic,
+                    "De acuerdo con la Ficha 9 y la Ficha 10, ¿cuándo resulta especialmente recomendable utilizar el paradigma de Mensajes (Messaging) en HL7 FHIR?",
+                    "{\n  \"resourceType\": \"Bundle\",\n  \"type\": \"message\"\n}",
+                    "La especificación indica que el intercambio por mensajes es más adecuado entre organizaciones dispares con bajo nivel de integración de procesos (ej. un laboratorio externo que notifica resultados a múltiples hospitales con sistemas distintos).",
+                    "A", "Únicamente cuando ambos sistemas pertenecen al mismo departamento y comparten la misma base de datos.", "En ese escenario no hay disparidad organizativa.",
+                    "B", "En el intercambio entre organizaciones dispares con bajo nivel de integración de procesos.", "Correcto: el emisor encamina el evento (como en HL7 v2 ADT/ORU) sin acoplarse a los procesos internos del receptor.",
+                    "C", "Solamente cuando se desea sustituir y corregir todos los defectos de la API REST.", "Como advierte la Ficha 2, ningún paradigma sustituye ni 'arregla' los defectos de otro; cumplen propósitos distintos.",
+                    "D", "Exclusivamente para almacenar recursos estáticos en disco duro sin transmitirlos.", "Eso corresponde al almacenamiento persistente (Base de datos)."
+            );
+
+            createDefaultCardQuestion(savedDeck, targetTopic,
+                    "Según la Ficha 5 sobre las capacidades del paradigma API REST en FHIR, ¿qué mecanismos adicionales incluye además de las operaciones CRUD y búsquedas?",
+                    null,
+                    "Tal como resume la Ficha 5, la API REST de FHIR contempla también el trabajo asíncrono (peticiones cuya respuesta se recoge más tarde) y consultas mediante GraphQL.",
+                    "A", "Trabajo asíncrono y consultas con GraphQL.", "Correcto: el paradigma REST de FHIR incluye interacciones asíncronas (Async Bulk/Request) y soporte de GraphQL.",
+                    "B", "Únicamente lecturas síncronas sin posibilidad de crear ni borrar recursos.", "La Ficha 4 confirma que permite crear, leer, modificar, borrar, buscar y ejecutar operaciones ($).",
+                    "C", "Solo permite pedir datos (pull), pero nunca enviarlos (push).", "La Ficha 4 aclara explícitamente que sirve tanto para enviar datos (push) como para pedirlos (pull).",
+                    "D", "Obliga a transmitir los datos en segmentos HL7 v2 separados por tuberías (|).", "Eso es sintaxis HL7 v2, no API REST de FHIR."
+            );
+
+            createDefaultCardQuestion(savedDeck, targetTopic,
+                    "Atendiendo a la tabla comparativa de la Ficha 3, ¿qué forma de mover datos en FHIR se asemeja a «enviar un informe cerrado y firmado» para que una persona lo lea tal cual se emitió?",
+                    "{\n  \"resourceType\": \"Bundle\",\n  \"type\": \"document\"\n}",
+                    "En la Ficha 3 se resume que los Documentos (Documents) equivalen a enviar un informe clínico cerrado y firmado para que sea leído por una persona tal cual se emitió.",
+                    "A", "Documentos (Documents).", "Correcto: los documentos FHIR representan un conjunto clínico coherente, cerrado y firmado.",
+                    "B", "API REST.", "REST se asemeja a ir a una ventanilla a pedir o dejar datos concretos al momento.",
+                    "C", "Servicios (Services / SOA).", "Los servicios se asemejan a departamentos de una empresa que se solicitan acciones entre sí.",
+                    "D", "Base de datos (Persistent store).", "La base de datos equivale al archivador donde se guarda todo en formato FHIR."
+            );
+        } catch (Exception ignored) {
+            // No bloquear el arranque si ocurre cualquier excepción en el seed inicial
+        }
+    }
+
+    private void createDefaultCardQuestion(StudyMaterial material, SyllabusTopic topic,
+                                           String stem, String snippet, String explanation,
+                                           String label1, String text1, String reason1,
+                                           String label2, String text2, String reason2,
+                                           String label3, String text3, String reason3,
+                                           String label4, String text4, String reason4) {
+        Question q = new Question();
+        q.setMaterial(material);
+        q.setTopic(topic);
+        q.setSource("MANUAL");
+        q.setQuestionType("SINGLE_CHOICE");
+        q.setDifficulty(2);
+        q.setVerified(true);
+        q.setStem(stem);
+        q.setCodeSnippet(snippet);
+        q.setExplanation(explanation);
+        q.setFhirSpecUrl("https://hl7.org/fhir/R4/exchange-module.html");
+        q = questionRepository.save(q);
+
+        boolean c1 = reason1.startsWith("Correcto");
+        boolean c2 = reason2.startsWith("Correcto");
+        boolean c3 = reason3.startsWith("Correcto");
+        boolean c4 = reason4.startsWith("Correcto");
+
+        q.addOption(new QuestionOption(label1, text1, c1, reason1));
+        q.addOption(new QuestionOption(label2, text2, c2, reason2));
+        q.addOption(new QuestionOption(label3, text3, c3, reason3));
+        q.addOption(new QuestionOption(label4, text4, c4, reason4));
+
+        for (QuestionOption opt : q.getOptions()) {
+            questionOptionRepository.save(opt);
+        }
+        srsService.ensureSrsState(q);
     }
 
     public void deleteMaterial(Long id) {
         studyMaterialRepository.findById(id).ifPresent(m -> {
+            // Eliminar comentarios asociados a las fichas
+            studyCardCommentRepository.deleteByMaterialId(id);
+            // Desvincular preguntas asociadas antes de eliminar el material para evitar errores de FK
+            List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(id);
+            for (Question q : linked) {
+                q.setMaterial(null);
+                questionRepository.save(q);
+            }
             if (m.getFilePath() != null) {
                 try {
                     java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(m.getFilePath()));
@@ -363,7 +677,7 @@ public class StudyMaterialService {
 
         long linkedCount = questionRepository.countByMaterialIdAndVerifiedTrue(materialId);
         int totalRelevant = (int) linkedCount;
-        if (material.getTopic() != null) {
+        if (material.getTopic() != null && !"STUDY_CARDS".equalsIgnoreCase(material.getSourceType())) {
             int topicCount = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId()).size();
             totalRelevant = Math.max((int) linkedCount, topicCount);
         }
@@ -375,7 +689,7 @@ public class StudyMaterialService {
         info.put("topicId", material.getTopic() != null ? material.getTopic().getId() : null);
         info.put("topicName", material.getTopic() != null ? material.getTopic().getName() : "General");
         info.put("linkedQuestionsCount", linkedCount);
-        info.put("totalRelevantCount", Math.max(1, totalRelevant));
+        info.put("totalRelevantCount", "STUDY_CARDS".equalsIgnoreCase(material.getSourceType()) ? linkedCount : Math.max(1, totalRelevant));
         return info;
     }
 

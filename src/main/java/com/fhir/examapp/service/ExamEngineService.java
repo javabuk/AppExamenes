@@ -247,6 +247,13 @@ public class ExamEngineService {
         List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
         List<Question> result = new ArrayList<>(linked);
         Collections.shuffle(result);
+
+        // Si es un mazo de Fichas de Aprendizaje (STUDY_CARDS) y tiene preguntas adjuntas,
+        // evaluar exclusivamente las preguntas configuradas en dichas fichas.
+        if ("STUDY_CARDS".equalsIgnoreCase(material.getSourceType()) && !result.isEmpty()) {
+            return result.size() > count ? new ArrayList<>(result.subList(0, count)) : result;
+        }
+
         Set<Long> pickedIds = linked.stream().map(Question::getId).collect(Collectors.toSet());
 
         // 2. Si faltan preguntas para la cuota solicitada, buscar preguntas del mismo tema
