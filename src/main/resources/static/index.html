@@ -1402,14 +1402,78 @@
                         </form>
                     </div>
 
-                    <!-- Study Card Decks Selector Strip -->
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between px-1">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Colecciones de Fichas Disponibles</span>
-                            <span class="text-[11px] text-slate-500">Selecciona una colección para proyectar sus fichas</span>
+                    <!-- Compact Quick-Deck Selection Bar & Catalog Toggle -->
+                    <div class="bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <!-- Prev / Next Deck Quick Stepper -->
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button type="button" onclick="stepStudyCardDeck(-1)" title="Colección anterior" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition flex items-center justify-center cursor-pointer">
+                                    ◀
+                                </button>
+                                <button type="button" onclick="stepStudyCardDeck(1)" title="Colección siguiente" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition flex items-center justify-center cursor-pointer">
+                                    ▶
+                                </button>
+                            </div>
+
+                            <!-- Native Quick Selector Dropdown -->
+                            <div class="relative min-w-0 flex-1 max-w-md">
+                                <select id="sc-deck-quick-select" onchange="selectStudyCardDeck(Number(this.value))" class="w-full bg-slate-950 border border-indigo-500/50 hover:border-indigo-400 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 truncate cursor-pointer transition">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
                         </div>
-                        <div id="study-cards-decks-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <!-- Populated dynamically -->
+
+                        <!-- Catalog Modal / Drawer Toggle & Count Badge -->
+                        <div class="flex items-center justify-between md:justify-end gap-2 shrink-0">
+                            <span id="study-cards-decks-count-badge" class="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                                0 colecciones
+                            </span>
+                            <button type="button" id="btn-toggle-cards-catalog" onclick="toggleStudyCardsCatalogModal()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm">
+                                <span>🗂️ Ver Catálogo Completo</span>
+                                <span id="cards-catalog-badge" class="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">0</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Horizontal Scrollable Quick-Pill Strip for Instant 1-Click Deck Switching -->
+                    <div id="study-cards-pills-strip" class="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin scrollbar-thumb-slate-700 select-none">
+                        <!-- Populated dynamically with compact chips -->
+                    </div>
+
+                    <!-- Study Card Decks Catalog Modal / Popover (Hidden by default to save vertical space) -->
+                    <div id="modal-cards-catalog" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden modal-box">
+                            <!-- Catalog Header -->
+                            <div class="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 shrink-0">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-sm">🗂️</span>
+                                    <div>
+                                        <h3 class="text-sm font-bold text-white">Catálogo de Fichas de Aprendizaje</h3>
+                                        <p class="text-[11px] text-slate-400">Selecciona cualquier colección para proyectar inmediatamente sus fichas</p>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="closeStudyCardsCatalogModal()" class="text-slate-400 hover:text-white text-base font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition cursor-pointer">
+                                    ✕
+                                </button>
+                            </div>
+
+                            <!-- Search & Filter Bar inside Catalog Modal -->
+                            <div class="p-3 bg-slate-900/90 border-b border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                                <div class="relative flex-1">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
+                                    <input id="cards-catalog-search-input" type="text" oninput="filterStudyCardsCatalog()" placeholder="Filtrar por título, palabra clave o #ID..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <select id="cards-catalog-topic-select" onchange="filterStudyCardsCatalog()" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 sm:max-w-[220px]">
+                                    <option value="">Todos los Temas</option>
+                                </select>
+                            </div>
+
+                            <!-- Scrollable Cards Grid Container -->
+                            <div class="p-4 overflow-y-auto flex-1">
+                                <div id="study-cards-decks-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -2792,6 +2856,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=3.0.0"></script>
+    <script src="/app.js?v=3.1.0"></script>
 </body>
 </html>

@@ -3550,27 +3550,53 @@ function formatInlineMarkdown(text) {
  */
 function renderStudyCardsSection() {
     const decksContainer = document.getElementById('study-cards-decks-container');
+    const pillsStrip = document.getElementById('study-cards-pills-strip');
+    const quickSelect = document.getElementById('sc-deck-quick-select');
     const countBadge = document.getElementById('study-cards-decks-count-badge');
+    const catalogBadge = document.getElementById('cards-catalog-badge');
     const presentationWrapper = document.getElementById('study-cards-presentation-wrapper');
-    if (!decksContainer) return;
+    const topicSelect = document.getElementById('cards-catalog-topic-select');
 
     const studyCardDecks = (allMaterials || []).filter(m => isStudyCardsMaterial(m));
 
     if (countBadge) {
-        countBadge.textContent = `${studyCardDecks.length} colecci${studyCardDecks.length === 1 ? 'ón' : 'ones'} disponible${studyCardDecks.length === 1 ? '' : 's'}`;
+        countBadge.textContent = `${studyCardDecks.length} colecci${studyCardDecks.length === 1 ? 'ón' : 'ones'}`;
+    }
+    if (catalogBadge) {
+        catalogBadge.textContent = String(studyCardDecks.length);
+    }
+
+    if (topicSelect && topicSelect.options.length <= 1) {
+        topicSelect.innerHTML = '<option value="">Todos los Temas</option>';
+        const seenTopics = new Map();
+        studyCardDecks.forEach(d => {
+            if (d.topic && !seenTopics.has(d.topic.id)) {
+                seenTopics.set(d.topic.id, d.topic.name);
+            }
+        });
+        seenTopics.forEach((name, id) => {
+            const opt = document.createElement('option');
+            opt.value = String(id);
+            opt.textContent = name;
+            topicSelect.appendChild(opt);
+        });
     }
 
     if (studyCardDecks.length === 0) {
-        decksContainer.innerHTML = `
-            <div class="col-span-full bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
-                <span class="text-4xl block mb-2">🗂️</span>
-                <p class="text-white font-bold text-sm">Aún no hay colecciones de Fichas de Aprendizaje</p>
-                <p class="text-slate-400 text-xs mt-1 mb-4">Carga tus apuntes con capítulos (##) y fichas (###) para estudiarlos como presentación interactiva.</p>
-                <button onclick="toggleStudyCardsUploadDrawer(true); loadSampleStudyCardsMarkdown();" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition">
-                    ✨ Cargar Fichas de Ejemplo FHIR
-                </button>
-            </div>
-        `;
+        if (decksContainer) {
+            decksContainer.innerHTML = `
+                <div class="col-span-full bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
+                    <span class="text-4xl block mb-2">🗂️</span>
+                    <p class="text-white font-bold text-sm">Aún no hay colecciones de Fichas de Aprendizaje</p>
+                    <p class="text-slate-400 text-xs mt-1 mb-4">Carga tus apuntes con capítulos (##) y fichas (###) para estudiarlos como presentación interactiva.</p>
+                    <button onclick="toggleStudyCardsUploadDrawer(true); loadSampleStudyCardsMarkdown();" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition">
+                        ✨ Cargar Fichas de Ejemplo FHIR
+                    </button>
+                </div>
+            `;
+        }
+        if (pillsStrip) pillsStrip.innerHTML = '';
+        if (quickSelect) quickSelect.innerHTML = '<option value="">Sin colecciones</option>';
         if (presentationWrapper) presentationWrapper.classList.add('hidden');
         return;
     }
@@ -3583,8 +3609,93 @@ function renderStudyCardsSection() {
         activeStudyCardSlideIndex = 0;
     }
 
+    // 1. Poblar el Quick Select Dropdown nativo
+    if (quickSelect) {
+        quickSelect.innerHTML = '';
+        studyCardDecks.forEach(deck => {
+            const opt = document.createElement('option');
+            opt.value = String(deck.id);
+            const parsed = parseStudyCardsMarkdown(deck.contentText || '');
+            opt.textContent = `🗂️ ${deck.title} (${parsed.cards.length} fichas)`;
+            if (deck.id === activeStudyCardDeckId) {
+                opt.selected = true;
+            }
+            quickSelect.appendChild(opt);
+        });
+    }
+
+    // 2. Poblar la tira horizontal de píldoras rápidas (1 clic)
+    if (pillsStrip) {
+        pillsStrip.innerHTML = '';
+        studyCardDecks.forEach(deck => {
+            const isSelected = deck.id === activeStudyCardDeckId;
+            const parsed = parseStudyCardsMarkdown(deck.contentText || '');
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            pill.dataset.deckId = String(deck.id);
+            pill.className = isSelected
+                ? 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer transition'
+                : 'px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 shrink-0 flex items-center gap-1.5 cursor-pointer transition';
+            pill.onclick = () => selectStudyCardDeck(deck.id);
+            pill.innerHTML = `
+                <span>🗂️</span>
+                <span class="max-w-[200px] truncate">${deck.title}</span>
+                <span class="px-1.5 py-0.2 rounded text-[10px] font-mono ${isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-slate-800 text-slate-400'}">${parsed.cards.length}</span>
+            `;
+            pillsStrip.appendChild(pill);
+
+            if (isSelected) {
+                setTimeout(() => {
+                    pill.scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+                }, 50);
+            }
+        });
+    }
+
+    // 3. Poblar las tarjetas del Catálogo Completo (en el modal/popover)
+    filterStudyCardsCatalog();
+
+    selectStudyCardDeck(activeStudyCardDeckId, true);
+}
+
+/**
+ * Filtra las tarjetas mostradas en el Catálogo Modal según el buscador y el tema
+ */
+function filterStudyCardsCatalog() {
+    const decksContainer = document.getElementById('study-cards-decks-container');
+    if (!decksContainer) return;
+
+    const searchInput = document.getElementById('cards-catalog-search-input');
+    const topicSelect = document.getElementById('cards-catalog-topic-select');
+    const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    const topicFilter = topicSelect ? topicSelect.value : '';
+
+    const studyCardDecks = (allMaterials || []).filter(m => isStudyCardsMaterial(m));
+    const filtered = studyCardDecks.filter(deck => {
+        if (topicFilter && (!deck.topic || String(deck.topic.id) !== topicFilter)) {
+            return false;
+        }
+        if (query) {
+            const titleMatch = (deck.title || '').toLowerCase().includes(query);
+            const idMatch = String(deck.id).includes(query);
+            const topicMatch = deck.topic && deck.topic.name.toLowerCase().includes(query);
+            const contentMatch = (deck.contentText || '').toLowerCase().includes(query);
+            return titleMatch || idMatch || topicMatch || contentMatch;
+        }
+        return true;
+    });
+
     decksContainer.innerHTML = '';
-    studyCardDecks.forEach(deck => {
+    if (filtered.length === 0) {
+        decksContainer.innerHTML = `
+            <div class="col-span-full py-8 text-center text-slate-400 text-xs">
+                🔍 No se encontraron colecciones de fichas con ese criterio de búsqueda.
+            </div>
+        `;
+        return;
+    }
+
+    filtered.forEach(deck => {
         const isSelected = deck.id === activeStudyCardDeckId;
         const parsed = parseStudyCardsMarkdown(deck.contentText || '');
         const linkedCount = deck.linkedQuestionsCount || 0;
@@ -3592,39 +3703,74 @@ function renderStudyCardsSection() {
 
         const cardEl = document.createElement('div');
         cardEl.className = isSelected
-            ? 'p-4 rounded-2xl border-2 border-amber-500/80 bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 shadow-lg shadow-amber-950/20 cursor-pointer transition flex flex-col justify-between'
-            : 'p-4 rounded-2xl border border-slate-800/90 bg-slate-900/60 hover:bg-slate-900 hover:border-slate-700 cursor-pointer transition flex flex-col justify-between';
+            ? 'p-3.5 rounded-2xl border-2 border-amber-500/80 bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 shadow-lg shadow-amber-950/20 cursor-pointer transition flex flex-col justify-between'
+            : 'p-3.5 rounded-2xl border border-slate-800/90 bg-slate-900/80 hover:bg-slate-800 hover:border-slate-700 cursor-pointer transition flex flex-col justify-between';
 
-        cardEl.onclick = () => selectStudyCardDeck(deck.id);
+        cardEl.onclick = () => {
+            selectStudyCardDeck(deck.id);
+            closeStudyCardsCatalogModal();
+        };
 
         cardEl.innerHTML = `
             <div>
-                <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
                     <div class="flex items-center gap-1.5">
                         <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">🗂️ ${parsed.cards.length} Fichas</span>
-                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-slate-800 text-slate-300 border border-slate-700">ID #${deck.id}</span>
+                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono bg-slate-800 text-slate-300 border border-slate-700">ID #${deck.id}</span>
                     </div>
                     <button onclick="event.stopPropagation(); deleteMaterial(${deck.id})" title="Eliminar colección" class="w-6 h-6 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition text-xs cursor-pointer">🗑️</button>
                 </div>
-                <h4 class="font-bold text-white text-sm leading-snug line-clamp-2">${deck.title}</h4>
-                <p class="text-[11px] text-slate-400 mt-1 truncate">📚 ${topicName} · ${parsed.chapters.length} capítulo${parsed.chapters.length === 1 ? '' : 's'}</p>
+                <h4 class="font-bold text-white text-xs leading-snug line-clamp-2">${deck.title}</h4>
+                <p class="text-[10px] text-slate-400 mt-1 truncate">📚 ${topicName} · ${parsed.chapters.length} capítulo${parsed.chapters.length === 1 ? '' : 's'}</p>
             </div>
-            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
-                    <span class="text-[11px] font-semibold ${linkedCount > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+            <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-semibold ${linkedCount > 0 ? 'text-emerald-400' : 'text-slate-500'}">
                         ${linkedCount > 0 ? `✅ ${linkedCount} preg.` : '⚪ 0 preg.'}
                     </span>
-                    ${(deck.commentsCount || 0) > 0 ? `<span class="text-[11px] font-semibold text-indigo-300">· 💬 ${deck.commentsCount} nota${deck.commentsCount === 1 ? '' : 's'}</span>` : ''}
+                    ${(deck.commentsCount || 0) > 0 ? `<span class="text-[10px] font-semibold text-indigo-300">· 💬 ${deck.commentsCount}</span>` : ''}
                 </div>
-                <span class="text-[11px] font-bold ${isSelected ? 'text-amber-400' : 'text-slate-400'}">
-                    ${isSelected ? '● En pantalla' : 'Ver presentación →'}
+                <span class="text-[10px] font-bold ${isSelected ? 'text-amber-400' : 'text-slate-400'}">
+                    ${isSelected ? '● Proyectando' : 'Seleccionar →'}
                 </span>
             </div>
         `;
         decksContainer.appendChild(cardEl);
     });
+}
 
-    selectStudyCardDeck(activeStudyCardDeckId, true);
+/**
+ * Control del modal/popover del Catálogo Completo
+ */
+function toggleStudyCardsCatalogModal() {
+    const modal = document.getElementById('modal-cards-catalog');
+    if (!modal) return;
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        filterStudyCardsCatalog();
+        const input = document.getElementById('cards-catalog-search-input');
+        if (input) setTimeout(() => input.focus(), 100);
+    } else {
+        closeStudyCardsCatalogModal();
+    }
+}
+
+function closeStudyCardsCatalogModal() {
+    const modal = document.getElementById('modal-cards-catalog');
+    if (modal) modal.classList.add('hidden');
+}
+
+/**
+ * Avanza o retrocede de colección en 1 solo clic con los botones ◀ / ▶
+ */
+function stepStudyCardDeck(direction) {
+    const studyCardDecks = (allMaterials || []).filter(m => isStudyCardsMaterial(m));
+    if (studyCardDecks.length === 0) return;
+    const currentIndex = studyCardDecks.findIndex(d => d.id === activeStudyCardDeckId);
+    let nextIndex = currentIndex + direction;
+    if (nextIndex < 0) nextIndex = studyCardDecks.length - 1;
+    if (nextIndex >= studyCardDecks.length) nextIndex = 0;
+    selectStudyCardDeck(studyCardDecks[nextIndex].id);
 }
 
 let activeDeckComments = [];
@@ -3680,11 +3826,29 @@ function selectStudyCardDeck(id, preserveSlideIndex = false) {
         }
     }
 
+    // Sincronizar el selector desplegable rápido y las píldoras horizontales si cambiamos de deck
+    const quickSelect = document.getElementById('sc-deck-quick-select');
+    if (quickSelect && quickSelect.value !== String(id)) {
+        quickSelect.value = String(id);
+    }
+
+    const pillsStrip = document.getElementById('study-cards-pills-strip');
+    if (pillsStrip) {
+        pillsStrip.querySelectorAll('button[data-deck-id]').forEach(b => {
+            const isSel = b.dataset.deckId === String(id);
+            b.className = isSel
+                ? 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer transition'
+                : 'px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 shrink-0 flex items-center gap-1.5 cursor-pointer transition';
+            if (isSel) {
+                b.scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+            }
+        });
+    }
+
     // Refrescar borde activo en las tarjetas de colección sin recursión
     const decksContainer = document.getElementById('study-cards-decks-container');
     if (decksContainer && changedDeck) {
-        renderStudyCardsSection();
-        return;
+        filterStudyCardsCatalog();
     }
 
     renderStudyCardsChaptersTree();
