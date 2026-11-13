@@ -3,6 +3,7 @@ package com.fhir.examapp.controller;
 import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.service.StudyMaterialService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -106,6 +107,23 @@ public class StudyMaterialController {
         return m != null ? ResponseEntity.ok(m) : ResponseEntity.notFound().build();
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateMaterial(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        try {
+            String title = payload.get("title") != null ? payload.get("title").toString() : null;
+            Long topicId = payload.get("topicId") != null ? Long.valueOf(payload.get("topicId").toString()) : null;
+            String content = payload.get("content") != null ? payload.get("content").toString()
+                    : (payload.get("contentText") != null ? payload.get("contentText").toString() : null);
+            return ResponseEntity.ok(studyMaterialService.updateMaterial(id, title, content, topicId));
+        } catch (AccessDeniedException e) {
+            throw e;
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error actualizando material: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/{id}/questions")
     public ResponseEntity<?> getMaterialQuestions(@PathVariable Long id) {
         return ResponseEntity.ok(studyMaterialService.getLinkedQuestions(id));
@@ -125,6 +143,8 @@ public class StudyMaterialController {
             }
             int attached = studyMaterialService.attachQuestionsToMaterial(id, qIds);
             return ResponseEntity.ok(Map.of("success", true, "attachedCount", attached));
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -135,6 +155,8 @@ public class StudyMaterialController {
         try {
             studyMaterialService.detachQuestionFromMaterial(id, questionId);
             return ResponseEntity.ok(Map.of("success", true));
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -155,6 +177,8 @@ public class StudyMaterialController {
                 contentMarkdown = payload.get("content") != null ? payload.get("content").toString() : null;
             }
             return ResponseEntity.ok(studyMaterialService.addCardComment(id, cardIndex, cardHeading, contentMarkdown));
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
@@ -170,6 +194,8 @@ public class StudyMaterialController {
                 contentMarkdown = payload.get("content") != null ? payload.get("content").toString() : null;
             }
             return ResponseEntity.ok(studyMaterialService.updateCardComment(id, commentId, contentMarkdown));
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
@@ -182,6 +208,8 @@ public class StudyMaterialController {
         try {
             studyMaterialService.deleteCardComment(id, commentId);
             return ResponseEntity.ok(Map.of("success", true));
+        } catch (AccessDeniedException e) {
+            throw e;
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

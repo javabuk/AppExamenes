@@ -10,8 +10,13 @@ import java.util.List;
 
 @Repository
 public interface StudyMaterialRepository extends JpaRepository<StudyMaterial, Long> {
-    List<StudyMaterial> findByTopicId(Long topicId);
 
-    @Query("SELECT m FROM StudyMaterial m WHERE LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(m.contentText) LIKE LOWER(CONCAT('%', :query, '%'))")
+    @Query("SELECT m FROM StudyMaterial m WHERE (m.deleted IS NULL OR m.deleted = false)")
+    List<StudyMaterial> findAllActive();
+
+    @Query("SELECT m FROM StudyMaterial m WHERE m.topic.id = :topicId AND (m.deleted IS NULL OR m.deleted = false)")
+    List<StudyMaterial> findByTopicId(@Param("topicId") Long topicId);
+
+    @Query("SELECT m FROM StudyMaterial m WHERE (m.deleted IS NULL OR m.deleted = false) AND (LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(m.contentText) LIKE LOWER(CONCAT('%', :query, '%')))")
     List<StudyMaterial> searchMaterials(@Param("query") String query);
 }

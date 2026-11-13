@@ -2,22 +2,20 @@ package com.fhir.examapp.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fhir.examapp.domain.Question;
-import com.fhir.examapp.domain.QuestionOption;
-import com.fhir.examapp.domain.StudyMaterial;
-import com.fhir.examapp.domain.SyllabusTopic;
+import com.fhir.examapp.domain.*;
 import com.fhir.examapp.dto.QuestionCreateDTO;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
+import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @Transactional
@@ -29,6 +27,8 @@ public class QuestionBankService {
     private final StudyMaterialRepository materialRepository;
     private final SpacedRepetitionService srsService;
     private final ObjectMapper objectMapper;
+    private final SecurityContextHelper securityContextHelper;
+    private final AuditService auditService;
 
     public QuestionBankService(QuestionRepository questionRepository,
                                QuestionOptionRepository optionRepository,
@@ -36,15 +36,53 @@ public class QuestionBankService {
                                StudyMaterialRepository materialRepository,
                                SpacedRepetitionService srsService,
                                ObjectMapper objectMapper) {
+        this(questionRepository, optionRepository, topicRepository,
+                materialRepository, srsService, objectMapper, null, null);
+    }
+
+    @Autowired
+    public QuestionBankService(QuestionRepository questionRepository,
+                               QuestionOptionRepository optionRepository,
+                               SyllabusTopicRepository topicRepository,
+                               StudyMaterialRepository materialRepository,
+                               SpacedRepetitionService srsService,
+                               ObjectMapper objectMapper,
+                               SecurityContextHelper securityContextHelper,
+                               AuditService auditService) {
         this.questionRepository = questionRepository;
         this.optionRepository = optionRepository;
         this.topicRepository = topicRepository;
         this.materialRepository = materialRepository;
         this.srsService = srsService;
         this.objectMapper = objectMapper;
+        this.securityContextHelper = securityContextHelper;
+        this.auditService = auditService;
+    }
+
+    private User resolveCurrentUser() {
+        if (securityContextHelper != null) {
+            return securityContextHelper.getCurrentUser();
+        }
+        User fallback = new User("admin", "admin@fhir.local", "Admin", "", Role.ADMIN);
+        fallback.setId(1L);
+        return fallback;
+    }
+
+    private void checkOwnershipOrAdmin(Question question) {
+        User currentUser = resolveCurrentUser();
+        if (currentUser.getRole() == Role.ADMIN) {
+            return;
+        }
+        if (question.getOwner() != null && question.getOwner().getId() != null
+                && question.getOwner().getId().equals(currentUser.getId())) {
+            return;
+        }
+        throw new AccessDeniedException("No tiene permiso para modificar o eliminar una pregunta creada por otro usuario.");
     }
 
     public Question createQuestion(QuestionCreateDTO dto) {
+        User currentUser = resolveCurrentUser();
+
         StudyMaterial material = null;
         if (dto.getMaterialId() != null) {
             material = materialRepository.findById(dto.getMaterialId()).orElse(null);
@@ -64,6 +102,9 @@ public class QuestionBankService {
         Question question = new Question();
         question.setTopic(topic);
         question.setMaterial(material);
+        question.setOwner(currentUser);
+        question.setCreatedAt(User.formatNow());
+        question.setDeleted(false);
         question.setStem(dto.getStem());
         question.setCodeSnippet(dto.getCodeSnippet());
         question.setExplanation(dto.getExplanation());
@@ -92,22 +133,83 @@ public class QuestionBankService {
             }
         }
 
-        srsService.ensureSrsState(saved);
+        srsService.ensureSrsState(currentUser.getId(), saved);
         return saved;
     }
 
-    /**
-     * Generador automático de preguntas "Espejo" y "Giro" (Clone & Twist):
-     * Toma una pregunta existente y genera una variante cambiando el escenario clínico,
-     * invirtiendo la condición lógica o evaluando el concepto complementario en FHIR.
-     */
+    public Question updateQuestion(Long id, QuestionCreateDTO dto) {
+        Question question = questionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + id));
+        if (Boolean.TRUE.equals(question.getDeleted())) {
+            throw new IllegalArgumentException("Pregunta no encontrada: " + id);
+        }
+
+        checkOwnershipOrAdmin(question);
+
+        if (dto.getTopicId() != null) {
+            SyllabusTopic topic = topicRepository.findById(dto.getTopicId())
+                    .orElseThrow(() -> new IllegalArgumentException("Tema no encontrado: " + dto.getTopicId()));
+            question.setTopic(topic);
+        }
+        if (dto.getMaterialId() != null) {
+            StudyMaterial mat = materialRepository.findById(dto.getMaterialId()).orElse(null);
+            question.setMaterial(mat);
+        }
+        if (dto.getStem() != null && !dto.getStem().isBlank()) {
+            question.setStem(dto.getStem().trim());
+        }
+        if (dto.getCodeSnippet() != null) {
+            question.setCodeSnippet(dto.getCodeSnippet());
+        }
+        if (dto.getExplanation() != null && !dto.getExplanation().isBlank()) {
+            question.setExplanation(dto.getExplanation().trim());
+        }
+        if (dto.getFhirSpecUrl() != null) {
+            question.setFhirSpecUrl(dto.getFhirSpecUrl());
+        }
+        if (dto.getDifficulty() != null) {
+            question.setDifficulty(dto.getDifficulty());
+        }
+        if (dto.getQuestionType() != null && !dto.getQuestionType().isBlank()) {
+            question.setQuestionType(dto.getQuestionType());
+        }
+
+        if (dto.getOptions() != null && !dto.getOptions().isEmpty()) {
+            question.getOptions().clear();
+            questionRepository.saveAndFlush(question);
+            for (QuestionCreateDTO.OptionCreateDTO optDto : dto.getOptions()) {
+                QuestionOption opt = new QuestionOption(
+                        optDto.getOptionLabel(),
+                        optDto.getOptionText(),
+                        optDto.getCorrect() != null ? optDto.getCorrect() : false,
+                        optDto.getDistractorReason()
+                );
+                question.addOption(opt);
+                optionRepository.save(opt);
+            }
+        }
+
+        question.setUpdatedAt(User.formatNow());
+        Question saved = questionRepository.save(question);
+
+        if (auditService != null) {
+            auditService.logUserAction(resolveCurrentUser(), "QUESTION_UPDATED", "QUESTION",
+                    String.valueOf(saved.getId()), "Pregunta editada: " + saved.getId(), "127.0.0.1");
+        }
+        return saved;
+    }
+
     public Question generateMirrorVariant(Long baseQuestionId) {
+        User currentUser = resolveCurrentUser();
         Question base = questionRepository.findById(baseQuestionId)
                 .orElseThrow(() -> new IllegalArgumentException("Pregunta base no encontrada: " + baseQuestionId));
 
         Question variant = new Question();
         variant.setTopic(base.getTopic());
         variant.setParentQuestion(base);
+        variant.setOwner(currentUser);
+        variant.setCreatedAt(User.formatNow());
+        variant.setDeleted(false);
         variant.setSource("AI_GENERATED");
         variant.setQuestionType(base.getQuestionType());
         variant.setDifficulty(base.getDifficulty());
@@ -115,7 +217,6 @@ public class QuestionBankService {
 
         String topicCode = base.getTopic() != null ? base.getTopic().getCode() : "";
 
-        // Reglas de generación según el dominio FHIR
         if (base.getStem().contains("Observation") || topicCode.equals("REST_SEARCH")) {
             variant.setStem("[Variante Giro] Un sistema clínico necesita recuperar los recursos DiagnosticReport que referencien al paciente 'Patient/456' y traer en la misma respuesta los recursos Observation correspondientes a los resultados (result). ¿Cuál es la consulta FHIR correcta?");
             variant.setCodeSnippet("GET [base]/DiagnosticReport?subject=Patient/456&_include=DiagnosticReport:result");
@@ -143,7 +244,6 @@ public class QuestionBankService {
             variant.addOption(new QuestionOption("D", "Solo si el servidor opera en modo XML en lugar de JSON.", false, "Las reglas de conformidad son idénticas en JSON y XML."));
 
         } else {
-            // Variante genérica de refuerzo
             variant.setStem("[Variante Espejo] " + base.getStem().replace("¿Cuál es", "¿Cuál de las siguientes afirmaciones describe con mayor precisión"));
             variant.setCodeSnippet(base.getCodeSnippet());
             variant.setExplanation("Variante de consolidación del concepto: " + base.getExplanation());
@@ -165,13 +265,10 @@ public class QuestionBankService {
             optionRepository.save(opt);
         }
 
-        srsService.ensureSrsState(variant);
+        srsService.ensureSrsState(currentUser.getId(), variant);
         return variant;
     }
 
-    /**
-     * Importación masiva de preguntas desde formato JSON con soporte de tema y material por defecto.
-     */
     public int importQuestionsFromJson(String jsonContent) throws IOException {
         return importQuestionsFromJson(jsonContent, null, null);
     }
@@ -194,7 +291,7 @@ public class QuestionBankService {
 
     @Transactional(readOnly = true)
     public List<Question> getAllQuestions() {
-        return questionRepository.findAll();
+        return questionRepository.findAllActive();
     }
 
     @Transactional(readOnly = true)
@@ -205,12 +302,25 @@ public class QuestionBankService {
     @Transactional(readOnly = true)
     public List<Question> searchQuestions(String query) {
         if (query == null || query.trim().isEmpty()) {
-            return questionRepository.findAll();
+            return questionRepository.findAllActive();
         }
         return questionRepository.searchByKeyword(query.trim());
     }
 
     public void deleteQuestion(Long id) {
-        questionRepository.deleteById(id);
+        Question question = questionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + id));
+        checkOwnershipOrAdmin(question);
+
+        // Soft delete para no romper exam_attempt_answers históricos
+        question.setDeleted(true);
+        question.setDeletedAt(User.formatNow());
+        question.setVerified(false);
+        questionRepository.save(question);
+
+        if (auditService != null) {
+            auditService.logUserAction(resolveCurrentUser(), "QUESTION_DELETED", "QUESTION",
+                    String.valueOf(id), "Pregunta eliminada lógicamente (soft-delete): " + id, "127.0.0.1");
+        }
     }
 }

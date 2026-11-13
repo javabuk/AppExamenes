@@ -6,6 +6,8 @@ import com.fhir.examapp.dto.DashboardDTO;
 import com.fhir.examapp.dto.RecentAttemptDTO;
 import com.fhir.examapp.dto.TopicHeatmapDTO;
 import com.fhir.examapp.repository.*;
+import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,25 +24,34 @@ public class DashboardService {
     private final QuestionRepository questionRepository;
     private final QuestionSrsStateRepository srsStateRepository;
     private final SpacedRepetitionService srsService;
+    private final SecurityContextHelper securityContextHelper;
 
+    @Autowired
     public DashboardService(SyllabusTopicRepository topicRepository,
                             ExamAttemptAnswerRepository attemptAnswerRepository,
                             ExamAttemptRepository attemptRepository,
                             QuestionRepository questionRepository,
                             QuestionSrsStateRepository srsStateRepository,
-                            SpacedRepetitionService srsService) {
+                            SpacedRepetitionService srsService,
+                            SecurityContextHelper securityContextHelper) {
         this.topicRepository = topicRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
         this.attemptRepository = attemptRepository;
         this.questionRepository = questionRepository;
         this.srsStateRepository = srsStateRepository;
         this.srsService = srsService;
+        this.securityContextHelper = securityContextHelper;
     }
 
     public DashboardDTO getDashboardData() {
+        Long userId = securityContextHelper != null ? securityContextHelper.getCurrentUserId() : 1L;
+        return getDashboardDataForUser(userId);
+    }
+
+    public DashboardDTO getDashboardDataForUser(Long userId) {
         DashboardDTO dashboard = new DashboardDTO();
 
-        // 1. Mapa de Calor por temas oficiales
+        // 1. Mapa de Calor por temas oficiales para este usuario
         List<SyllabusTopic> topics = topicRepository.findAll();
         List<TopicHeatmapDTO> heatmaps = new ArrayList<>();
 
@@ -54,9 +65,9 @@ public class DashboardService {
             h.setName(t.getName());
             h.setWeightPercent(t.getExamWeightPercent());
 
-            long totalAnswered = attemptAnswerRepository.countTotalByTopicId(t.getId());
-            long correctAnswered = attemptAnswerRepository.countCorrectByTopicId(t.getId());
-            Double avgTime = attemptAnswerRepository.averageTimeSpentByTopicId(t.getId());
+            long totalAnswered = attemptAnswerRepository.countTotalByUserIdAndTopicId(userId, t.getId());
+            long correctAnswered = attemptAnswerRepository.countCorrectByUserIdAndTopicId(userId, t.getId());
+            Double avgTime = attemptAnswerRepository.averageTimeSpentByUserIdAndTopicId(userId, t.getId());
 
             h.setTotalAnswered(totalAnswered);
             h.setCorrectAnswered(correctAnswered);
@@ -86,8 +97,8 @@ public class DashboardService {
         }
         dashboard.setTopicHeatmaps(heatmaps);
 
-        // 2. Intentos recientes
-        List<ExamAttempt> recentAttempts = attemptRepository.findTop10ByFinishedAtIsNotNullOrderByFinishedAtDesc();
+        // 2. Intentos recientes del usuario
+        List<ExamAttempt> recentAttempts = attemptRepository.findTop10ByUser_IdAndFinishedAtIsNotNullOrderByFinishedAtDesc(userId);
         List<RecentAttemptDTO> recentDTOs = new ArrayList<>();
         for (ExamAttempt a : recentAttempts) {
             RecentAttemptDTO r = new RecentAttemptDTO();
@@ -103,31 +114,27 @@ public class DashboardService {
         }
         dashboard.setRecentAttempts(recentDTOs);
 
-        // 3. Conteo de preguntas y estado de dominio
-        long totalQuestions = questionRepository.count();
+        // 3. Conteo de preguntas y estado de dominio del usuario
+        long totalQuestions = questionRepository.countActiveVerified();
         dashboard.setTotalQuestionsCount(totalQuestions);
 
-        long pendingErrors = questionRepository.findErrorInboxQuestions().size();
+        long pendingErrors = questionRepository.findErrorInboxQuestionsByUserId(userId).size();
         dashboard.setPendingErrorsCount(pendingErrors);
 
-        long dueReviews = srsService.getDueCount();
+        long dueReviews = srsService.getDueCountForUser(userId);
         dashboard.setDueReviewsCount(dueReviews);
 
-        // Mastered: preguntas con >= 2 aciertos consecutivos en SRS
-        long masteredCount = srsStateRepository.countMasteredQuestions();
+        // Mastered: preguntas con >= 2 aciertos consecutivos en SRS de este usuario
+        long masteredCount = srsStateRepository.countMasteredQuestionsByUserId(userId);
         dashboard.setMasteredQuestionsCount(masteredCount);
 
-        // 4. Métrica de velocidad global
-        Double avgGlobalTime = attemptAnswerRepository.averageTimeSpentGlobal();
+        // 4. Métrica de velocidad global del usuario
+        Double avgGlobalTime = attemptAnswerRepository.averageTimeSpentGlobalByUserId(userId);
         dashboard.setAverageTimePerQuestionSeconds(avgGlobalTime != null ? Math.round(avgGlobalTime * 10.0) / 10.0 : 0.0);
 
-        // 5. Cálculo del Readiness Score (Probabilidad de Aprobado):
-        // Ponderación: 
-        // - 50% nota media de los últimos simulacros
-        // - 30% precisión ponderada de temas
-        // - 20% cobertura de preguntas dominadas sin fallos
+        // 5. Cálculo del Readiness Score (Probabilidad de Aprobado) del usuario:
         double simulationAvg = 0.0;
-        List<ExamAttempt> sims = attemptRepository.findRecentSimulationAttempts();
+        List<ExamAttempt> sims = attemptRepository.findRecentSimulationAttemptsByUserId(userId);
         if (!sims.isEmpty()) {
             int take = Math.min(3, sims.size());
             double sum = 0.0;
@@ -153,7 +160,7 @@ public class DashboardService {
         dashboard.setReadinessScore(Math.round(readiness * 10.0) / 10.0);
 
         if (readiness >= 80.0) {
-            dashboard.setReadinessStatus("EXCELLENT"); // Preparado para aprobar examen HL7
+            dashboard.setReadinessStatus("EXCELLENT");
         } else if (readiness >= 65.0) {
             dashboard.setReadinessStatus("ON_TRACK");
         } else if (readiness > 0.0) {

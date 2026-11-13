@@ -3,16 +3,19 @@ package com.fhir.examapp.service;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
 import com.fhir.examapp.domain.QuestionSrsState;
+import com.fhir.examapp.domain.User;
 import com.fhir.examapp.dto.ExamOptionDTO;
 import com.fhir.examapp.dto.FlashcardDTO;
 import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.QuestionSrsStateRepository;
+import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,21 +24,27 @@ public class SpacedRepetitionService {
 
     private final QuestionSrsStateRepository srsStateRepository;
     private final QuestionRepository questionRepository;
+    private final SecurityContextHelper securityContextHelper;
 
     public SpacedRepetitionService(QuestionSrsStateRepository srsStateRepository, QuestionRepository questionRepository) {
+        this(srsStateRepository, questionRepository, null);
+    }
+
+    @Autowired
+    public SpacedRepetitionService(QuestionSrsStateRepository srsStateRepository,
+                                   QuestionRepository questionRepository,
+                                   SecurityContextHelper securityContextHelper) {
         this.srsStateRepository = srsStateRepository;
         this.questionRepository = questionRepository;
+        this.securityContextHelper = securityContextHelper;
+    }
+
+    private Long resolveCurrentUserId() {
+        return securityContextHelper != null ? securityContextHelper.getCurrentUserId() : 1L;
     }
 
     /**
      * Aplica el algoritmo SuperMemo-2 (SM-2) para calcular el próximo intervalo de repaso.
-     * Rating q:
-     * 5 - Respuesta perfecta
-     * 4 - Respuesta correcta tras ligera duda
-     * 3 - Respuesta correcta con seria dificultad
-     * 2 - Respuesta incorrecta pero recordada al ver la solución
-     * 1 - Respuesta incorrecta, solución familiar
-     * 0 - Olvido total (blackout)
      */
     public QuestionSrsState applySm2(QuestionSrsState state, int rating) {
         int q = Math.max(0, Math.min(5, rating));
@@ -57,7 +66,6 @@ public class SpacedRepetitionService {
             consecutive++;
         }
 
-        // Nueva fórmula de factor de facilidad EF
         ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
         if (ef < 1.3) {
             ef = 1.3;
@@ -67,7 +75,7 @@ public class SpacedRepetitionService {
         state.setEasinessFactor(Math.round(ef * 100.0) / 100.0);
         state.setIntervalDays(interval);
         state.setNextReviewDate(LocalDate.now().plusDays(interval));
-        state.setUpdatedAt(com.fhir.examapp.domain.User.formatNow());
+        state.setUpdatedAt(User.formatNow());
 
         return srsStateRepository.save(state);
     }
@@ -76,11 +84,11 @@ public class SpacedRepetitionService {
      * Actualiza el estado SM-2 automáticamente cuando una pregunta es contestada en un examen.
      */
     public void recordAnswerResult(Question question, boolean correct) {
-        recordAnswerResult(1L, question, correct);
+        recordAnswerResult(resolveCurrentUserId(), question, correct);
     }
 
     public void recordAnswerResult(Long userId, Question question, boolean correct) {
-        Long resolvedUserId = userId != null ? userId : 1L;
+        Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
         QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
                     QuestionSrsState newState = new QuestionSrsState(resolvedUserId, question.getId());
@@ -92,16 +100,19 @@ public class SpacedRepetitionService {
     }
 
     /**
-     * Registra una valoración manual desde el modo Flashcard.
+     * Registra una valoración manual desde el modo Flashcard para el usuario autenticado.
      */
     public QuestionSrsState recordManualReview(Long questionId, int rating) {
-        return recordManualReview(1L, questionId, rating);
+        return recordManualReview(resolveCurrentUserId(), questionId, rating);
     }
 
     public QuestionSrsState recordManualReview(Long userId, Long questionId, int rating) {
-        Long resolvedUserId = userId != null ? userId : 1L;
+        Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
         Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + questionId));
+        if (Boolean.TRUE.equals(question.getDeleted())) {
+            throw new IllegalArgumentException("Pregunta eliminada: " + questionId);
+        }
 
         QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
@@ -113,24 +124,41 @@ public class SpacedRepetitionService {
     }
 
     /**
-     * Obtiene las tarjetas de repaso pendientes para hoy o retrasadas.
+     * Obtiene las tarjetas de repaso pendientes para hoy o retrasadas para el usuario autenticado.
      */
     @Transactional(readOnly = true)
     public List<FlashcardDTO> getDueFlashcards() {
-        String today = LocalDate.now().toString();
-        List<QuestionSrsState> dueStates = srsStateRepository.findDueSrsStates(today);
-        if (dueStates.isEmpty()) {
+        return getDueFlashcardsForUser(resolveCurrentUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<FlashcardDTO> getDueFlashcardsForUser(Long userId) {
+        Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
+        LocalDate today = LocalDate.now();
+        List<Question> activeQuestions = questionRepository.findByVerifiedTrue();
+        if (activeQuestions.isEmpty()) {
             return List.of();
         }
 
-        List<Long> questionIds = dueStates.stream().map(QuestionSrsState::getQuestionId).collect(Collectors.toList());
-        java.util.Map<Long, Question> questionMap = questionRepository.findAllById(questionIds).stream()
-                .collect(Collectors.toMap(Question::getId, java.util.function.Function.identity()));
+        Map<Long, QuestionSrsState> stateByQuestionId = srsStateRepository.findByUserId(resolvedUserId).stream()
+                .collect(Collectors.toMap(QuestionSrsState::getQuestionId, Function.identity(), (a, b) -> a));
 
-        List<FlashcardDTO> list = dueStates.stream()
-                .map(s -> toFlashcardDTO(s, questionMap.get(s.getQuestionId())))
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toList());
+        List<FlashcardDTO> list = new ArrayList<>();
+        for (Question q : activeQuestions) {
+            QuestionSrsState state = stateByQuestionId.get(q.getId());
+            if (state == null) {
+                // Pregunta aún no revisada por este usuario: está pendiente para hoy
+                QuestionSrsState defaultState = new QuestionSrsState(resolvedUserId, q.getId());
+                FlashcardDTO dto = toFlashcardDTO(defaultState, q);
+                if (dto != null) list.add(dto);
+            } else {
+                LocalDate nextReview = state.getNextReviewDate();
+                if (nextReview == null || !nextReview.isAfter(today)) {
+                    FlashcardDTO dto = toFlashcardDTO(state, q);
+                    if (dto != null) list.add(dto);
+                }
+            }
+        }
 
         Collections.shuffle(list);
         return list;
@@ -138,15 +166,35 @@ public class SpacedRepetitionService {
 
     @Transactional(readOnly = true)
     public long getDueCount() {
-        return srsStateRepository.countDueReviews(LocalDate.now().toString());
+        return getDueCountForUser(resolveCurrentUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public long getDueCountForUser(Long userId) {
+        Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
+        LocalDate today = LocalDate.now();
+        List<Question> activeQuestions = questionRepository.findByVerifiedTrue();
+        if (activeQuestions.isEmpty()) return 0;
+
+        Map<Long, QuestionSrsState> stateByQuestionId = srsStateRepository.findByUserId(resolvedUserId).stream()
+                .collect(Collectors.toMap(QuestionSrsState::getQuestionId, Function.identity(), (a, b) -> a));
+
+        long due = 0;
+        for (Question q : activeQuestions) {
+            QuestionSrsState state = stateByQuestionId.get(q.getId());
+            if (state == null || state.getNextReviewDate() == null || !state.getNextReviewDate().isAfter(today)) {
+                due++;
+            }
+        }
+        return due;
     }
 
     public void ensureSrsState(Question question) {
-        ensureSrsState(1L, question);
+        ensureSrsState(resolveCurrentUserId(), question);
     }
 
     public void ensureSrsState(Long userId, Question question) {
-        Long resolvedUserId = userId != null ? userId : 1L;
+        Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
         if (question != null && question.getId() != null
                 && !srsStateRepository.existsByUserIdAndQuestionId(resolvedUserId, question.getId())) {
             QuestionSrsState state = new QuestionSrsState(resolvedUserId, question.getId());
@@ -155,7 +203,7 @@ public class SpacedRepetitionService {
     }
 
     private FlashcardDTO toFlashcardDTO(QuestionSrsState state, Question q) {
-        if (q == null) return null;
+        if (q == null || Boolean.TRUE.equals(q.getDeleted())) return null;
         FlashcardDTO dto = new FlashcardDTO();
         dto.setQuestionId(q.getId());
         dto.setTopicName(q.getTopic() != null ? q.getTopic().getName() : "General");
@@ -168,7 +216,6 @@ public class SpacedRepetitionService {
         dto.setIntervalDays(state.getIntervalDays());
         dto.setNextReviewDate(state.getNextReviewDate());
 
-        // Encontrar opción correcta
         if (q.getOptions() != null) {
             for (QuestionOption opt : q.getOptions()) {
                 if (Boolean.TRUE.equals(opt.getCorrect())) {

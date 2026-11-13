@@ -4,9 +4,11 @@ import com.fhir.examapp.domain.ExamAttempt;
 import com.fhir.examapp.domain.ExamAttemptAnswer;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
+import com.fhir.examapp.domain.Role;
 import com.fhir.examapp.domain.StudyCardComment;
 import com.fhir.examapp.domain.StudyMaterial;
 import com.fhir.examapp.domain.SyllabusTopic;
+import com.fhir.examapp.domain.User;
 import com.fhir.examapp.dto.MaterialEvolutionPointDTO;
 import com.fhir.examapp.dto.MaterialQuestionPerformanceDTO;
 import com.fhir.examapp.dto.MaterialStatsDTO;
@@ -17,9 +19,12 @@ import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.StudyCardCommentRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
+import com.fhir.examapp.security.SecurityContextHelper;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,6 +51,8 @@ public class StudyMaterialService {
     private final ExamAttemptRepository attemptRepository;
     private final ExamAttemptAnswerRepository attemptAnswerRepository;
     private final StudyCardCommentRepository studyCardCommentRepository;
+    private final SecurityContextHelper securityContextHelper;
+    private final AuditService auditService;
 
     public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
                                 SyllabusTopicRepository syllabusTopicRepository,
@@ -55,6 +62,22 @@ public class StudyMaterialService {
                                 ExamAttemptRepository attemptRepository,
                                 ExamAttemptAnswerRepository attemptAnswerRepository,
                                 StudyCardCommentRepository studyCardCommentRepository) {
+        this(studyMaterialRepository, syllabusTopicRepository, questionRepository,
+                questionOptionRepository, srsService, attemptRepository,
+                attemptAnswerRepository, studyCardCommentRepository, null, null);
+    }
+
+    @Autowired
+    public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
+                                SyllabusTopicRepository syllabusTopicRepository,
+                                QuestionRepository questionRepository,
+                                QuestionOptionRepository questionOptionRepository,
+                                SpacedRepetitionService srsService,
+                                ExamAttemptRepository attemptRepository,
+                                ExamAttemptAnswerRepository attemptAnswerRepository,
+                                StudyCardCommentRepository studyCardCommentRepository,
+                                SecurityContextHelper securityContextHelper,
+                                AuditService auditService) {
         this.studyMaterialRepository = studyMaterialRepository;
         this.syllabusTopicRepository = syllabusTopicRepository;
         this.questionRepository = questionRepository;
@@ -63,6 +86,29 @@ public class StudyMaterialService {
         this.attemptRepository = attemptRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
         this.studyCardCommentRepository = studyCardCommentRepository;
+        this.securityContextHelper = securityContextHelper;
+        this.auditService = auditService;
+    }
+
+    private User resolveCurrentUser() {
+        if (securityContextHelper != null) {
+            return securityContextHelper.getCurrentUser();
+        }
+        User fallback = new User("admin", "admin@fhir.local", "Admin", "", Role.ADMIN);
+        fallback.setId(1L);
+        return fallback;
+    }
+
+    private void checkMaterialOwnershipOrAdmin(StudyMaterial material) {
+        User currentUser = resolveCurrentUser();
+        if (currentUser.getRole() == Role.ADMIN) {
+            return;
+        }
+        if (material.getOwner() != null && material.getOwner().getId() != null
+                && material.getOwner().getId().equals(currentUser.getId())) {
+            return;
+        }
+        throw new AccessDeniedException("No tiene permiso para modificar o eliminar un material creado por otro usuario.");
     }
 
     /**
@@ -104,8 +150,11 @@ public class StudyMaterialService {
                 file.getOriginalFilename() + "#total"
         );
         material.setFilePath(targetFile.getPath());
+        material.setOwner(resolveCurrentUser());
+        material.setCreatedAt(User.formatNow());
+        material.setDeleted(false);
 
-        return studyMaterialRepository.save(material);
+        return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     /**
@@ -217,8 +266,11 @@ public class StudyMaterialService {
         if (downloadedPdfPath != null) {
             material.setFilePath(downloadedPdfPath);
         }
+        material.setOwner(resolveCurrentUser());
+        material.setCreatedAt(User.formatNow());
+        material.setDeleted(false);
 
-        return studyMaterialRepository.save(material);
+        return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     /**
@@ -267,6 +319,9 @@ public class StudyMaterialService {
                 safeOriginal
         );
         material.setFilePath(targetFile.getPath());
+        material.setOwner(resolveCurrentUser());
+        material.setCreatedAt(User.formatNow());
+        material.setDeleted(false);
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -318,6 +373,9 @@ public class StudyMaterialService {
                 safeTitle
         );
         material.setFilePath(targetFile.getPath());
+        material.setOwner(resolveCurrentUser());
+        material.setCreatedAt(User.formatNow());
+        material.setDeleted(false);
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -333,13 +391,17 @@ public class StudyMaterialService {
                 content,
                 referenceUrl
         );
+        material.setOwner(resolveCurrentUser());
+        material.setCreatedAt(User.formatNow());
+        material.setDeleted(false);
         return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     private StudyMaterial enrichMaterial(StudyMaterial m) {
         if (m != null && m.getId() != null) {
             m.setLinkedQuestionsCount(questionRepository.countByMaterialIdAndVerifiedTrue(m.getId()));
-            m.setCommentsCount(studyCardCommentRepository.countByMaterialId(m.getId()));
+            Long currentUserId = resolveCurrentUser().getId();
+            m.setCommentsCount(studyCardCommentRepository.countByMaterialIdAndUser_Id(m.getId(), currentUserId));
         }
         return m;
     }
@@ -361,19 +423,49 @@ public class StudyMaterialService {
     @Transactional(readOnly = true)
     public List<StudyMaterial> searchMaterials(String query) {
         if (query == null || query.trim().isEmpty()) {
-            return enrichMaterials(studyMaterialRepository.findAll());
+            return enrichMaterials(studyMaterialRepository.findAllActive());
         }
         return enrichMaterials(studyMaterialRepository.searchMaterials(query.trim()));
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> getAllMaterials() {
-        return enrichMaterials(studyMaterialRepository.findAll());
+        return enrichMaterials(studyMaterialRepository.findAllActive());
     }
 
     @Transactional(readOnly = true)
     public StudyMaterial getMaterialById(Long id) {
-        return enrichMaterial(studyMaterialRepository.findById(id).orElse(null));
+        StudyMaterial m = studyMaterialRepository.findById(id).orElse(null);
+        if (m == null || Boolean.TRUE.equals(m.getDeleted())) return null;
+        return enrichMaterial(m);
+    }
+
+    public StudyMaterial updateMaterial(Long id, String title, String contentText, Long topicId) {
+        StudyMaterial material = studyMaterialRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + id));
+        if (Boolean.TRUE.equals(material.getDeleted())) {
+            throw new IllegalArgumentException("Material no encontrado: " + id);
+        }
+
+        checkMaterialOwnershipOrAdmin(material);
+
+        if (title != null && !title.isBlank()) {
+            material.setTitle(title.trim());
+        }
+        if (contentText != null && !contentText.isBlank()) {
+            material.setContentText(contentText);
+        }
+        if (topicId != null) {
+            syllabusTopicRepository.findById(topicId).ifPresent(material::setTopic);
+        }
+        material.setUpdatedAt(User.formatNow());
+        StudyMaterial saved = studyMaterialRepository.save(material);
+
+        if (auditService != null) {
+            auditService.logUserAction(resolveCurrentUser(), "MATERIAL_UPDATED", "MATERIAL",
+                    String.valueOf(saved.getId()), "Material editado: " + saved.getTitle(), "127.0.0.1");
+        }
+        return enrichMaterial(saved);
     }
 
     @Transactional(readOnly = true)
@@ -384,13 +476,14 @@ public class StudyMaterialService {
     public int attachQuestionsToMaterial(Long materialId, List<Long> questionIds) {
         StudyMaterial material = studyMaterialRepository.findById(materialId)
                 .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + materialId));
+        checkMaterialOwnershipOrAdmin(material);
         if (questionIds == null || questionIds.isEmpty()) return 0;
 
         int attached = 0;
         for (Long qId : questionIds) {
             if (qId == null) continue;
             Question q = questionRepository.findById(qId).orElse(null);
-            if (q != null) {
+            if (q != null && !Boolean.TRUE.equals(q.getDeleted())) {
                 q.setMaterial(material);
                 questionRepository.save(q);
                 attached++;
@@ -400,6 +493,10 @@ public class StudyMaterialService {
     }
 
     public void detachQuestionFromMaterial(Long materialId, Long questionId) {
+        StudyMaterial material = studyMaterialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + materialId));
+        checkMaterialOwnershipOrAdmin(material);
+
         Question q = questionRepository.findById(questionId)
                 .orElseThrow(() -> new IllegalArgumentException("Pregunta no encontrada: " + questionId));
         if (q.getMaterial() != null && materialId.equals(q.getMaterial().getId())) {
@@ -408,14 +505,16 @@ public class StudyMaterialService {
         }
     }
 
-    // =================== COMENTARIOS Y NOTAS EN FICHAS DE ESTUDIO ===================
+    // =================== COMENTARIOS Y NOTAS EN FICHAS DE ESTUDIO (PRIVADOS POR USUARIO) ===================
 
     @Transactional(readOnly = true)
     public List<StudyCardComment> getCardComments(Long materialId) {
-        return studyCardCommentRepository.findByMaterialIdOrderByCardIndexAscIdAsc(materialId);
+        User currentUser = resolveCurrentUser();
+        return studyCardCommentRepository.findByMaterialIdAndUser_IdOrderByCardIndexAscIdAsc(materialId, currentUser.getId());
     }
 
     public StudyCardComment addCardComment(Long materialId, Integer cardIndex, String cardHeading, String contentMarkdown) {
+        User currentUser = resolveCurrentUser();
         StudyMaterial material = studyMaterialRepository.findById(materialId)
                 .orElseThrow(() -> new IllegalArgumentException("Colección de fichas no encontrada: " + materialId));
 
@@ -428,6 +527,7 @@ public class StudyMaterialService {
 
         StudyCardComment comment = new StudyCardComment(
                 material,
+                currentUser,
                 resolvedIndex,
                 cardHeading != null ? cardHeading.trim() : ("Ficha " + (resolvedIndex + 1)),
                 contentMarkdown.trim(),
@@ -437,11 +537,16 @@ public class StudyMaterialService {
     }
 
     public StudyCardComment updateCardComment(Long materialId, Long commentId, String contentMarkdown) {
+        User currentUser = resolveCurrentUser();
         StudyCardComment comment = studyCardCommentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comentario no encontrado: " + commentId));
 
         if (comment.getMaterial() == null || !materialId.equals(comment.getMaterial().getId())) {
             throw new IllegalArgumentException("El comentario no pertenece a esta colección de fichas.");
+        }
+        if (comment.getUser() != null && comment.getUser().getId() != null
+                && !comment.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("No tiene permiso para editar la nota de otro usuario.");
         }
         if (contentMarkdown == null || contentMarkdown.trim().isEmpty()) {
             throw new IllegalArgumentException("El texto del comentario no puede estar vacío.");
@@ -453,8 +558,14 @@ public class StudyMaterialService {
     }
 
     public void deleteCardComment(Long materialId, Long commentId) {
+        User currentUser = resolveCurrentUser();
         StudyCardComment comment = studyCardCommentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comentario no encontrado: " + commentId));
+
+        if (comment.getUser() != null && comment.getUser().getId() != null
+                && !comment.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("No tiene permiso para eliminar la nota de otro usuario.");
+        }
 
         if (comment.getMaterial() != null && materialId.equals(comment.getMaterial().getId())) {
             studyCardCommentRepository.delete(comment);
@@ -641,22 +752,19 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
     }
 
     public void deleteMaterial(Long id) {
-        studyMaterialRepository.findById(id).ifPresent(m -> {
-            // Eliminar comentarios asociados a las fichas
-            studyCardCommentRepository.deleteByMaterialId(id);
-            // Desvincular preguntas asociadas antes de eliminar el material para evitar errores de FK
-            List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(id);
-            for (Question q : linked) {
-                q.setMaterial(null);
-                questionRepository.save(q);
-            }
-            if (m.getFilePath() != null) {
-                try {
-                    java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(m.getFilePath()));
-                } catch (Exception ignored) {}
-            }
-            studyMaterialRepository.delete(m);
-        });
+        StudyMaterial m = studyMaterialRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Material no encontrado: " + id));
+        checkMaterialOwnershipOrAdmin(m);
+
+        // Soft delete para conservar trazabilidad e intentos históricos asociados al material
+        m.setDeleted(true);
+        m.setDeletedAt(User.formatNow());
+        studyMaterialRepository.save(m);
+
+        if (auditService != null) {
+            auditService.logUserAction(resolveCurrentUser(), "MATERIAL_DELETED", "MATERIAL",
+                    String.valueOf(id), "Material eliminado lógicamente (soft-delete): " + m.getTitle(), "127.0.0.1");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -699,6 +807,9 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
         Question q = new Question();
         q.setMaterial(material);
         q.setTopic(material.getTopic());
+        q.setOwner(resolveCurrentUser());
+        q.setCreatedAt(User.formatNow());
+        q.setDeleted(false);
         q.setSource("AI_GENERATED");
         q.setQuestionType("SINGLE_CHOICE");
         q.setDifficulty(2);
@@ -784,8 +895,11 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
         long linkedCount = questionRepository.countByMaterialIdAndVerifiedTrue(materialId);
         dto.setLinkedQuestionsCount(linkedCount);
 
-        // 1. Obtener intentos completados asociados a este material (ordenados cronológicamente)
-        List<ExamAttempt> attempts = attemptRepository.findFinishedAttemptsForMaterial(materialId);
+        // 1. Obtener intentos completados asociados a este material para el usuario actual (ordenados cronológicamente)
+        Long currentUserId = resolveCurrentUser().getId();
+        List<ExamAttempt> attempts = (securityContextHelper != null)
+                ? attemptRepository.findFinishedAttemptsForMaterialAndUser(materialId, currentUserId)
+                : attemptRepository.findFinishedAttemptsForMaterial(materialId);
         dto.setTotalAttempts(attempts.size());
 
         if (!attempts.isEmpty()) {
@@ -870,9 +984,11 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
             dto.setAverageTimeSeconds((int) (totalDurationSec / attempts.size()));
         }
 
-        // 2. Desglose de preguntas del documento y su dominio
+        // 2. Desglose de preguntas del documento y su dominio para el usuario actual
         List<Question> linkedQuestions = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
-        List<ExamAttemptAnswer> materialAnswers = attemptAnswerRepository.findAnswersByMaterialId(materialId);
+        List<ExamAttemptAnswer> materialAnswers = (securityContextHelper != null)
+                ? attemptAnswerRepository.findAnswersByMaterialIdAndUserId(materialId, currentUserId)
+                : attemptAnswerRepository.findAnswersByMaterialId(materialId);
 
         Map<Long, List<ExamAttemptAnswer>> answersByQuestionId = materialAnswers.stream()
                 .filter(ans -> ans.getQuestion() != null && ans.getQuestion().getId() != null)

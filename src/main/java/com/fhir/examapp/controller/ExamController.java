@@ -35,4 +35,13 @@ public class ExamController {
     public ResponseEntity<List<ExamAttempt>> getRecentAttempts() {
         return ResponseEntity.ok(examEngineService.getRecentAttempts());
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ExamResultDTO> getAttemptReview(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(examEngineService.getAttemptReview(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }

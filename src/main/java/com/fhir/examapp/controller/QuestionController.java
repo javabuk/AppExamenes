@@ -38,6 +38,15 @@ public class QuestionController {
         return ResponseEntity.ok(questionBankService.createQuestion(dto));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<Question> updateQuestion(@PathVariable Long id, @RequestBody QuestionCreateDTO dto) {
+        try {
+            return ResponseEntity.ok(questionBankService.updateQuestion(id, dto));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @PostMapping("/{id}/variant")
     public ResponseEntity<Question> generateVariant(@PathVariable Long id) {
         return ResponseEntity.ok(questionBankService.generateMirrorVariant(id));

@@ -3,6 +3,9 @@ package com.fhir.examapp.service;
 import com.fhir.examapp.domain.*;
 import com.fhir.examapp.dto.*;
 import com.fhir.examapp.repository.*;
+import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ public class ExamEngineService {
     private final SyllabusTopicRepository topicRepository;
     private final SpacedRepetitionService srsService;
     private final StudyMaterialRepository studyMaterialRepository;
+    private final SecurityContextHelper securityContextHelper;
 
     public ExamEngineService(ExamAttemptRepository attemptRepository,
                              ExamAttemptAnswerRepository attemptAnswerRepository,
@@ -28,24 +32,49 @@ public class ExamEngineService {
                              SyllabusTopicRepository topicRepository,
                              SpacedRepetitionService srsService,
                              StudyMaterialRepository studyMaterialRepository) {
+        this(attemptRepository, attemptAnswerRepository, questionRepository,
+                topicRepository, srsService, studyMaterialRepository, null);
+    }
+
+    @Autowired
+    public ExamEngineService(ExamAttemptRepository attemptRepository,
+                             ExamAttemptAnswerRepository attemptAnswerRepository,
+                             QuestionRepository questionRepository,
+                             SyllabusTopicRepository topicRepository,
+                             SpacedRepetitionService srsService,
+                             StudyMaterialRepository studyMaterialRepository,
+                             SecurityContextHelper securityContextHelper) {
         this.attemptRepository = attemptRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
         this.questionRepository = questionRepository;
         this.topicRepository = topicRepository;
         this.srsService = srsService;
         this.studyMaterialRepository = studyMaterialRepository;
+        this.securityContextHelper = securityContextHelper;
+    }
+
+    private User resolveCurrentUser() {
+        if (securityContextHelper != null) {
+            return securityContextHelper.getCurrentUser();
+        }
+        User fallback = new User("admin", "admin@fhir.local", "Admin", "", Role.ADMIN);
+        fallback.setId(1L);
+        return fallback;
+    }
+
+    private boolean isCurrentUserAdmin() {
+        return securityContextHelper != null && securityContextHelper.isCurrentUserAdmin();
     }
 
     /**
-     * Inicia una sesión de examen en cualquiera de los 4 modos oficiales:
-     * - SIMULATION: Ponderado por pesos del temario HL7 FHIR
-     * - ADAPTIVE (Weak-Spot Hunter): 60% temas débiles, 25% falladas, 15% nuevas
-     * - TUTOR: Retroalimentación inmediata
-     * - ERRORS (Maratón de Fallos): Preguntas falladas sin 2 aciertos seguidos
+     * Inicia una sesión de examen en cualquiera de los 4 modos oficiales para el usuario autenticado.
      */
     public ExamSessionDTO startExam(ExamStartRequest request) {
+        User currentUser = resolveCurrentUser();
+        Long userId = currentUser.getId();
+
         String mode = request.getMode() != null ? request.getMode().toUpperCase() : "SIMULATION";
-        int totalQuestionsNeeded = request.getQuestionCount() != null && request.getQuestionCount() > 0 
+        int totalQuestionsNeeded = request.getQuestionCount() != null && request.getQuestionCount() > 0
                 ? request.getQuestionCount() : 10;
 
         List<Question> selectedQuestions;
@@ -54,19 +83,18 @@ public class ExamEngineService {
 
         if (request.getMaterialId() != null) {
             StudyMaterial mat = studyMaterialRepository.findById(request.getMaterialId()).orElse(null);
-            if (mat != null) {
+            if (mat != null && !Boolean.TRUE.equals(mat.getDeleted())) {
                 targetMaterial = mat;
                 materialTitle = mat.getTitle();
                 selectedQuestions = selectQuestionsForMaterial(mat, mode, totalQuestionsNeeded);
             } else {
-                selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId());
+                selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId(), userId);
             }
         } else {
-            selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId());
+            selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId(), userId);
         }
 
         if (selectedQuestions.isEmpty()) {
-            // Si el modo específico no arrojó resultados (ej. no hay fallos en ERRORS), cargar banco general
             selectedQuestions = questionRepository.findByVerifiedTrue();
             if (selectedQuestions.size() > totalQuestionsNeeded) {
                 Collections.shuffle(selectedQuestions);
@@ -74,12 +102,11 @@ public class ExamEngineService {
             }
         }
 
-        // Asegurar que el orden de presentación de las preguntas sea siempre aleatorio en cualquier modo/examen
         selectedQuestions = new ArrayList<>(selectedQuestions);
         Collections.shuffle(selectedQuestions);
 
-        // Crear intento en BBDD
-        ExamAttempt attempt = new ExamAttempt(mode);
+        // Crear intento en BBDD asociado al usuario autenticado
+        ExamAttempt attempt = new ExamAttempt(mode, currentUser);
         if (targetMaterial != null) {
             attempt.setMaterial(targetMaterial);
         }
@@ -94,7 +121,6 @@ public class ExamEngineService {
         session.setMaterialTitle(materialTitle);
 
         if ("SIMULATION".equalsIgnoreCase(mode)) {
-            // En simulación estándar HL7, ~1.8 minutos por pregunta (50 preguntas en 90 min)
             session.setTimeLimitMinutes(Math.max(5, (int) Math.round(selectedQuestions.size() * 1.8)));
         }
 
@@ -114,7 +140,6 @@ public class ExamEngineService {
             qDto.setStem(q.getStem());
             qDto.setCodeSnippet(q.getCodeSnippet());
 
-            // En modo Tutor se incluye la explicación y feedback inmediato
             if (isTutor) {
                 qDto.setExplanation(q.getExplanation());
                 qDto.setFhirSpecUrl(q.getFhirSpecUrl());
@@ -127,7 +152,7 @@ public class ExamEngineService {
             }
 
             List<ExamOptionDTO> optionDTOs = q.getOptions().stream()
-                    .map(o -> isTutor 
+                    .map(o -> isTutor
                             ? new ExamOptionDTO(o.getId(), o.getOptionLabel(), o.getOptionText(), o.getCorrect(), o.getDistractorReason())
                             : new ExamOptionDTO(o.getId(), o.getOptionLabel(), o.getOptionText()))
                     .collect(Collectors.toList());
@@ -141,15 +166,25 @@ public class ExamEngineService {
     }
 
     /**
-     * Evalúa y finaliza el examen, calculando la nota, actualizando SRS y generando desglose con distractor reasons.
+     * Evalúa y finaliza el examen, verificando que el intento pertenezca al usuario autenticado (anti-IDOR).
      */
     public ExamResultDTO submitExam(ExamSubmitRequest request) {
+        User currentUser = resolveCurrentUser();
         ExamAttempt attempt = attemptRepository.findById(request.getAttemptId())
                 .orElseThrow(() -> new IllegalArgumentException("Intento de examen no encontrado: " + request.getAttemptId()));
 
+        if (attempt.getUser() != null && attempt.getUser().getId() != null
+                && !attempt.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("No tiene permiso para enviar ni modificar el intento de examen de otro usuario.");
+        }
+
+        if (attempt.getUser() == null) {
+            attempt.setUser(currentUser);
+        }
+
         attempt.setFinishedAt(LocalDateTime.now());
 
-        Map<Long, ExamAnswerSubmissionDTO> answersByQuestionId = new HashMap<>();
+        Map<Long, ExamAnswerSubmissionDTO> answersByQuestionId = new LinkedHashMap<>();
         if (request.getAnswers() != null) {
             for (ExamAnswerSubmissionDTO ans : request.getAnswers()) {
                 answersByQuestionId.put(ans.getQuestionId(), ans);
@@ -173,7 +208,6 @@ public class ExamEngineService {
             totalSeconds += timeSpent;
             boolean flagged = Boolean.TRUE.equals(sub.getFlagged());
 
-            // Encontrar opción correcta
             String correctOptionLabel = "";
             for (QuestionOption opt : q.getOptions()) {
                 if (Boolean.TRUE.equals(opt.getCorrect())) {
@@ -187,36 +221,16 @@ public class ExamEngineService {
                 correctCount++;
             }
 
-            // Persistir respuesta
             ExamAttemptAnswer attemptAnswer = new ExamAttemptAnswer(
                     q, selectedOption, isCorrect, timeSpent, flagged
             );
             attempt.addAnswer(attemptAnswer);
             attemptAnswerRepository.save(attemptAnswer);
 
-            // Actualizar repetición espaciada SM-2
-            srsService.recordAnswerResult(q, isCorrect);
+            // Actualizar repetición espaciada SM-2 para el usuario autenticado
+            srsService.recordAnswerResult(currentUser.getId(), q, isCorrect);
 
-            // Crear DTO de revisión detallada
-            QuestionReviewDTO rev = new QuestionReviewDTO();
-            rev.setQuestionId(q.getId());
-            rev.setTopicName(q.getTopic() != null ? q.getTopic().getName() : "");
-            rev.setStem(q.getStem());
-            rev.setCodeSnippet(q.getCodeSnippet());
-            rev.setSelectedOptions(selectedOption);
-            rev.setCorrectOptionLabel(correctOptionLabel);
-            rev.setCorrect(isCorrect);
-            rev.setFlagged(flagged);
-            rev.setTimeSpentSeconds(timeSpent);
-            rev.setExplanation(q.getExplanation());
-            rev.setFhirSpecUrl(q.getFhirSpecUrl());
-
-            List<ExamOptionDTO> optionDTOs = q.getOptions().stream()
-                    .map(o -> new ExamOptionDTO(o.getId(), o.getOptionLabel(), o.getOptionText(), o.getCorrect(), o.getDistractorReason()))
-                    .collect(Collectors.toList());
-            rev.setOptions(optionDTOs);
-
-            reviews.add(rev);
+            reviews.add(buildQuestionReviewDTO(q, selectedOption, correctOptionLabel, isCorrect, flagged, timeSpent));
         }
 
         double scorePercent = totalCount > 0 ? ((double) correctCount / totalCount) * 100.0 : 0.0;
@@ -232,10 +246,108 @@ public class ExamEngineService {
         result.setCorrectCount(correctCount);
         result.setTotalCount(totalCount);
         result.setTotalTimeSeconds(totalSeconds);
-        result.setPassed(scorePercent >= 80.0); // 80% umbral seguro FHIR
+        result.setPassed(scorePercent >= 80.0);
         result.setReviews(reviews);
 
         return result;
+    }
+
+    /**
+     * Obtiene el detalle completo y corrección de un intento finalizado.
+     * Verifica que el intento pertenezca al usuario autenticado o que sea ADMIN.
+     */
+    @Transactional(readOnly = true)
+    public ExamResultDTO getAttemptReview(Long attemptId) {
+        User currentUser = resolveCurrentUser();
+        ExamAttempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new IllegalArgumentException("Intento de examen no encontrado: " + attemptId));
+
+        if (attempt.getUser() != null && attempt.getUser().getId() != null
+                && !attempt.getUser().getId().equals(currentUser.getId())
+                && !isCurrentUserAdmin()) {
+            throw new AccessDeniedException("No tiene permiso para consultar el intento de otro usuario.");
+        }
+
+        return buildExamResultFromAttempt(attempt);
+    }
+
+    @Transactional(readOnly = true)
+    public ExamResultDTO buildExamResultFromAttempt(ExamAttempt attempt) {
+        int totalCount = attempt.getAnswers() != null ? attempt.getAnswers().size() : 0;
+        int correctCount = 0;
+        int totalSeconds = 0;
+        List<QuestionReviewDTO> reviews = new ArrayList<>();
+
+        if (attempt.getAnswers() != null) {
+            for (ExamAttemptAnswer ans : attempt.getAnswers()) {
+                Question q = ans.getQuestion();
+                if (q == null) continue;
+                boolean isCorrect = Boolean.TRUE.equals(ans.getCorrect());
+                if (isCorrect) correctCount++;
+                int timeSpent = ans.getTimeSpentSeconds() != null ? ans.getTimeSpentSeconds() : 0;
+                totalSeconds += timeSpent;
+
+                String correctOptionLabel = "";
+                for (QuestionOption opt : q.getOptions()) {
+                    if (Boolean.TRUE.equals(opt.getCorrect())) {
+                        correctOptionLabel = opt.getOptionLabel().toUpperCase();
+                        break;
+                    }
+                }
+
+                reviews.add(buildQuestionReviewDTO(
+                        q,
+                        ans.getSelectedOptions(),
+                        correctOptionLabel,
+                        isCorrect,
+                        Boolean.TRUE.equals(ans.getFlagged()),
+                        timeSpent
+                ));
+            }
+        }
+
+        if (totalSeconds == 0 && attempt.getStartedAt() != null && attempt.getFinishedAt() != null) {
+            try {
+                totalSeconds = (int) Math.max(1, Duration.between(attempt.getStartedAt(), attempt.getFinishedAt()).getSeconds());
+            } catch (Exception ignored) {}
+        }
+
+        double scorePercent = attempt.getScorePercent() != null ? attempt.getScorePercent() : 0.0;
+
+        ExamResultDTO result = new ExamResultDTO();
+        result.setAttemptId(attempt.getId());
+        result.setMode(attempt.getMode());
+        result.setStartedAt(attempt.getStartedAt());
+        result.setFinishedAt(attempt.getFinishedAt());
+        result.setScorePercent(scorePercent);
+        result.setCorrectCount(correctCount);
+        result.setTotalCount(totalCount);
+        result.setTotalTimeSeconds(totalSeconds);
+        result.setPassed(scorePercent >= 80.0);
+        result.setReviews(reviews);
+        return result;
+    }
+
+    private QuestionReviewDTO buildQuestionReviewDTO(Question q, String selectedOption, String correctOptionLabel,
+                                                     boolean isCorrect, boolean flagged, int timeSpent) {
+        QuestionReviewDTO rev = new QuestionReviewDTO();
+        rev.setQuestionId(q.getId());
+        rev.setTopicName(q.getTopic() != null ? q.getTopic().getName() : "");
+        rev.setStem(q.getStem());
+        rev.setCodeSnippet(q.getCodeSnippet());
+        rev.setSelectedOptions(selectedOption);
+        rev.setCorrectOptionLabel(correctOptionLabel);
+        rev.setCorrect(isCorrect);
+        rev.setFlagged(flagged);
+        rev.setTimeSpentSeconds(timeSpent);
+        rev.setExplanation(q.getExplanation());
+        rev.setFhirSpecUrl(q.getFhirSpecUrl());
+
+        List<ExamOptionDTO> optionDTOs = q.getOptions().stream()
+                .map(o -> new ExamOptionDTO(o.getId(), o.getOptionLabel(), o.getOptionText(), o.getCorrect(), o.getDistractorReason()))
+                .collect(Collectors.toList());
+        rev.setOptions(optionDTOs);
+        return rev;
     }
 
     public List<Question> selectQuestionsForMaterial(StudyMaterial material, String mode, int count) {
@@ -243,21 +355,16 @@ public class ExamEngineService {
 
         Long materialId = material.getId();
 
-        // 1. Preguntas explícitamente vinculadas a este material
         List<Question> linked = questionRepository.findByMaterialIdAndVerifiedTrue(materialId);
         List<Question> result = new ArrayList<>(linked);
         Collections.shuffle(result);
 
-        // Si es un mazo de Fichas de Aprendizaje (STUDY_CARDS) y tiene preguntas adjuntas,
-        // evaluar exclusivamente las preguntas configuradas en dichas fichas.
         if ("STUDY_CARDS".equalsIgnoreCase(material.getSourceType()) && !result.isEmpty()) {
             return result.size() > count ? new ArrayList<>(result.subList(0, count)) : result;
         }
 
         Set<Long> pickedIds = linked.stream().map(Question::getId).collect(Collectors.toSet());
 
-        // 2. Si faltan preguntas para la cuota solicitada, buscar preguntas del mismo tema
-        //    y ordenarlas por relevancia según los conceptos y palabras clave del documento
         if (result.size() < count && material.getTopic() != null) {
             List<Question> topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId());
 
@@ -267,7 +374,7 @@ public class ExamEngineService {
             topicQuestions.sort((q1, q2) -> {
                 int score1 = calculateRelevanceScore(q1, keywords);
                 int score2 = calculateRelevanceScore(q2, keywords);
-                return Integer.compare(score2, score1); // Más afines primero
+                return Integer.compare(score2, score1);
             });
 
             for (Question q : topicQuestions) {
@@ -279,7 +386,6 @@ public class ExamEngineService {
             }
         }
 
-        // 3. Si aún faltaran para alcanzar la cuota (p. ej. en temas pequeños), rellenar con banco general
         if (result.size() < count) {
             List<Question> remaining = questionRepository.findByVerifiedTrue();
             Collections.shuffle(remaining);
@@ -293,7 +399,6 @@ public class ExamEngineService {
         }
 
         Collections.shuffle(result);
-
         return result.size() > count ? new ArrayList<>(result.subList(0, count)) : result;
     }
 
@@ -324,7 +429,7 @@ public class ExamEngineService {
         return score;
     }
 
-    private List<Question> selectQuestionsForMode(String mode, int count, Long topicIdFilter) {
+    private List<Question> selectQuestionsForMode(String mode, int count, Long topicIdFilter, Long userId) {
         if (topicIdFilter != null) {
             List<Question> byTopic = questionRepository.findByTopicIdAndVerifiedTrue(topicIdFilter);
             Collections.shuffle(byTopic);
@@ -336,12 +441,12 @@ public class ExamEngineService {
                 return selectWeightedSimulationQuestions(count);
 
             case "ADAPTIVE":
-                return selectAdaptiveQuestions(count);
+                return selectAdaptiveQuestions(count, userId);
 
             case "ERRORS":
-                List<Question> errors = questionRepository.findErrorInboxQuestions();
+                List<Question> errors = questionRepository.findErrorInboxQuestionsByUserId(userId);
                 if (errors.isEmpty()) {
-                    errors = questionRepository.findPreviouslyFailedQuestions();
+                    errors = questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
                 }
                 Collections.shuffle(errors);
                 return errors.size() > count ? errors.subList(0, count) : errors;
@@ -354,9 +459,6 @@ public class ExamEngineService {
         }
     }
 
-    /**
-     * Selección para Modo Simulacro: Distribución ponderada por los pesos oficiales de HL7 FHIR.
-     */
     private List<Question> selectWeightedSimulationQuestions(int totalCount) {
         List<SyllabusTopic> topics = topicRepository.findAll();
         List<Question> result = new ArrayList<>();
@@ -378,7 +480,6 @@ public class ExamEngineService {
             }
         }
 
-        // Rellenar si faltan para alcanzar la meta totalCount
         if (result.size() < totalCount) {
             List<Question> remaining = questionRepository.findByVerifiedTrue();
             Collections.shuffle(remaining);
@@ -395,13 +496,7 @@ public class ExamEngineService {
         return result;
     }
 
-    /**
-     * Modo Entrenamiento Adaptativo (Weak-Spot Hunter):
-     * 60% preguntas de temas con menor tasa de acierto,
-     * 25% preguntas falladas previamente,
-     * 15% preguntas nuevas (no intentadas).
-     */
-    private List<Question> selectAdaptiveQuestions(int totalCount) {
+    private List<Question> selectAdaptiveQuestions(int totalCount, Long userId) {
         int weakCount = (int) Math.round(totalCount * 0.60);
         int failedCount = (int) Math.round(totalCount * 0.25);
         int newCount = totalCount - weakCount - failedCount;
@@ -409,9 +504,8 @@ public class ExamEngineService {
         List<Question> selected = new ArrayList<>();
         Set<Long> pickedIds = new HashSet<>();
 
-        // 1. Temas con menor tasa de acierto
-        List<SyllabusTopic> topics = topicRepository.findAll();
-        topics.sort(Comparator.comparingDouble(this::calculateTopicAccuracy));
+        List<SyllabusTopic> topics = new ArrayList<>(topicRepository.findAll());
+        topics.sort(Comparator.comparingDouble(t -> calculateTopicAccuracy(t, userId)));
 
         for (SyllabusTopic t : topics) {
             List<Question> tQuestions = questionRepository.findByTopicIdAndVerifiedTrue(t.getId());
@@ -425,8 +519,7 @@ public class ExamEngineService {
             if (selected.size() >= weakCount) break;
         }
 
-        // 2. Preguntas falladas anteriormente
-        List<Question> failedQuestions = questionRepository.findPreviouslyFailedQuestions();
+        List<Question> failedQuestions = questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
         Collections.shuffle(failedQuestions);
         int addedFailed = 0;
         for (Question q : failedQuestions) {
@@ -437,8 +530,7 @@ public class ExamEngineService {
             }
         }
 
-        // 3. Preguntas nuevas
-        List<Question> newQuestions = questionRepository.findUnattemptedQuestions();
+        List<Question> newQuestions = questionRepository.findUnattemptedQuestionsByUserId(userId);
         Collections.shuffle(newQuestions);
         int addedNew = 0;
         for (Question q : newQuestions) {
@@ -449,7 +541,6 @@ public class ExamEngineService {
             }
         }
 
-        // Rellenar hasta totalCount si los subgrupos eran pequeños
         if (selected.size() < totalCount) {
             List<Question> fallback = questionRepository.findByVerifiedTrue();
             Collections.shuffle(fallback);
@@ -466,15 +557,16 @@ public class ExamEngineService {
         return selected;
     }
 
-    private double calculateTopicAccuracy(SyllabusTopic topic) {
-        long total = attemptAnswerRepository.countTotalByTopicId(topic.getId());
+    private double calculateTopicAccuracy(SyllabusTopic topic, Long userId) {
+        long total = attemptAnswerRepository.countTotalByUserIdAndTopicId(userId, topic.getId());
         if (total == 0) return 0.0;
-        long correct = attemptAnswerRepository.countCorrectByTopicId(topic.getId());
+        long correct = attemptAnswerRepository.countCorrectByUserIdAndTopicId(userId, topic.getId());
         return (double) correct / total;
     }
 
     @Transactional(readOnly = true)
     public List<ExamAttempt> getRecentAttempts() {
-        return attemptRepository.findTop10ByFinishedAtIsNotNullOrderByFinishedAtDesc();
+        User currentUser = resolveCurrentUser();
+        return attemptRepository.findTop10ByUser_IdAndFinishedAtIsNotNullOrderByFinishedAtDesc(currentUser.getId());
     }
 }

@@ -11,9 +11,13 @@ public interface StudyCardCommentRepository extends JpaRepository<StudyCardComme
 
     List<StudyCardComment> findByMaterialIdOrderByCardIndexAscIdAsc(Long materialId);
 
+    List<StudyCardComment> findByMaterialIdAndUser_IdOrderByCardIndexAscIdAsc(Long materialId, Long userId);
+
     List<StudyCardComment> findByMaterialIdAndCardIndexOrderByIdAsc(Long materialId, Integer cardIndex);
 
     long countByMaterialId(Long materialId);
+
+    long countByMaterialIdAndUser_Id(Long materialId, Long userId);
 
     void deleteByMaterialId(Long materialId);
 }
