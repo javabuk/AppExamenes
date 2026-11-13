@@ -470,8 +470,57 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-blue-500/30 selection:text-blue-200">
 
+    <!-- ======================================================================= -->
+    <!-- PANTALLA DE LOGIN (FULL-SCREEN GLASSMORPHISM)                           -->
+    <!-- ======================================================================= -->
+    <div id="auth-login-screen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/60 relative overflow-hidden">
+        <!-- Decorative Ambient Glows -->
+        <div class="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="w-full max-w-md bg-slate-900/85 backdrop-blur-xl border border-slate-700/80 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10 modal-box">
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/25 text-3xl">
+                    🔥
+                </div>
+                <h1 class="text-2xl font-extrabold text-white tracking-tight">FHIR Cert Master</h1>
+                <p class="text-xs text-slate-400">Plataforma Oficial de Preparación & Trazabilidad HL7 FHIR R4</p>
+            </div>
+
+            <div id="login-error-box" class="hidden p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-medium flex items-center gap-2.5">
+                <span>⚠️</span>
+                <span id="login-error-text">Credenciales inválidas</span>
+            </div>
+
+            <form id="login-form" onsubmit="submitLogin(event)" class="space-y-4">
+                <div>
+                    <label for="login-username" class="block text-xs font-semibold text-slate-300 mb-1.5">Usuario o Correo Electrónico</label>
+                    <input id="login-username" type="text" required autocomplete="username" placeholder="Ej: admin o usuario@fhir.local" class="w-full bg-slate-950/90 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-xs font-semibold text-slate-300 mb-1.5">Contraseña</label>
+                    <input id="login-password" type="password" required autocomplete="current-password" placeholder="••••••••••••" class="w-full bg-slate-950/90 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+                </div>
+                <button id="btn-login-submit" type="submit" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white font-bold text-sm transition shadow-lg shadow-blue-600/25 cursor-pointer flex items-center justify-center gap-2">
+                    <span>🔐 Iniciar Sesión</span>
+                </button>
+            </form>
+
+            <div class="pt-3 border-t border-slate-800/80 text-center">
+                <p class="text-[11px] text-slate-500">
+                    🔒 Acceso protegido con sesión segura y trazabilidad individual por usuario.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- CONTENEDOR PRINCIPAL AUTENTICADO (SPA SHELL)                            -->
+    <!-- ======================================================================= -->
+    <div id="app-authenticated-shell" class="hidden flex-1 flex flex-col min-h-screen">
+
     <!-- Top Navigation Bar -->
-    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center space-x-3.5">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 font-bold text-lg text-white">
                 🔥
@@ -485,17 +534,36 @@
             </div>
         </div>
 
-        <div class="flex items-center space-x-3">
-            <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 font-mono">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>API Conectada</span>
-            </div>
+        <div class="flex flex-wrap items-center gap-2.5">
             <button onclick="openNewExamModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition shadow-sm shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer">
                 <span>▶ Iniciar Examen</span>
             </button>
             <button onclick="loadDashboard()" class="px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-300 border border-slate-700/80 transition cursor-pointer">
                 ↻ Actualizar
             </button>
+
+            <!-- User Session Widget -->
+            <div id="header-user-widget" class="flex items-center gap-2 pl-2 sm:border-l border-slate-800">
+                <div class="flex items-center gap-2 bg-slate-950/70 border border-slate-800 rounded-xl px-3 py-1.5">
+                    <div id="user-avatar-badge" class="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-bold text-xs flex items-center justify-center">
+                        U
+                    </div>
+                    <div class="leading-tight">
+                        <div class="flex items-center gap-1.5">
+                            <span id="user-display-name" class="text-xs font-bold text-white">Usuario</span>
+                            <span id="user-role-badge" class="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">USER</span>
+                        </div>
+                        <span id="user-username-label" class="text-[10px] font-mono text-slate-400 block">@username</span>
+                    </div>
+                </div>
+                <button onclick="openChangePasswordModal(false)" title="Cambiar mi contraseña" class="px-2.5 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition cursor-pointer">
+                    🔑
+                </button>
+                <button onclick="handleLogout()" title="Cerrar sesión" class="px-2.5 py-2 text-xs font-semibold rounded-xl bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 border border-rose-500/30 transition cursor-pointer flex items-center gap-1">
+                    <span>🚪</span>
+                    <span class="hidden md:inline">Salir</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -531,6 +599,25 @@
                 <span class="flex items-center gap-3"><span>🗂️</span> Fichas de Estudio</span>
                 <span id="badge-sidebar-cards-count" class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold px-2 py-0.5 rounded-full">1</span>
             </button>
+
+            <!-- Sección de Administración (Visible únicamente para rol ADMIN) -->
+            <div id="sidebar-admin-section" class="hidden pt-4 mt-4 border-t border-slate-800/80 space-y-1">
+                <div class="text-[11px] font-semibold text-amber-400/90 uppercase tracking-wider px-3 mb-2 flex items-center gap-1.5">
+                    <span>🛡️</span> Administración
+                </div>
+                <button onclick="switchTab('admin-users')" id="btn-tab-admin-users" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                    <span>👥</span> Usuarios
+                </button>
+                <button onclick="switchTab('admin-results')" id="btn-tab-admin-results" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                    <span>📈</span> Resultados por Usuario
+                </button>
+                <button onclick="switchTab('admin-aggregate')" id="btn-tab-admin-aggregate" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                    <span>🌐</span> Vista Agregada & CSV
+                </button>
+                <button onclick="switchTab('admin-audit')" id="btn-tab-admin-audit" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                    <span>📋</span> Auditoría
+                </button>
+            </div>
         </aside>
 
         <!-- Main Content Area -->
@@ -1529,8 +1616,297 @@
                     </div>
                 </div>
             </section>
+
+            <!-- ======================================================================= -->
+            <!-- SECTION: ADMIN — GESTIÓN DE USUARIOS                                    -->
+            <!-- ======================================================================= -->
+            <section id="view-admin-users" class="hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>👥</span> Administración de Usuarios
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Gestión de cuentas, roles, estado de activación (baja lógica) y reseteo seguro de contraseñas</p>
+                    </div>
+                    <button onclick="openCreateUserModal()" class="px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg shadow-blue-600/25 flex items-center gap-2 cursor-pointer">
+                        <span>＋ Crear Nuevo Usuario</span>
+                    </button>
+                </div>
+
+                <!-- Filtros de búsqueda -->
+                <div class="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                    <div class="relative flex-1">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
+                        <input id="admin-users-search" type="text" oninput="loadAdminUsers(0)" placeholder="Buscar por nombre, usuario o email..." class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <select id="admin-users-role-filter" onchange="loadAdminUsers(0)" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                        <option value="">Todos los Roles</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="USER">USER</option>
+                    </select>
+                    <select id="admin-users-active-filter" onchange="loadAdminUsers(0)" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                        <option value="">Todos los Estados</option>
+                        <option value="true">Activos</option>
+                        <option value="false">Desactivados</option>
+                    </select>
+                </div>
+
+                <!-- Tabla de Usuarios -->
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 overflow-hidden shadow-md">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="uppercase bg-slate-900/70 text-slate-400 border-b border-slate-700 text-[11px]">
+                                <tr>
+                                    <th class="py-3 px-4">ID</th>
+                                    <th class="py-3 px-4">Usuario / Nombre</th>
+                                    <th class="py-3 px-4">Email</th>
+                                    <th class="py-3 px-4">Rol</th>
+                                    <th class="py-3 px-4">Estado</th>
+                                    <th class="py-3 px-4">Último Acceso</th>
+                                    <th class="py-3 px-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-table-body" class="divide-y divide-slate-700/60">
+                                <tr><td colspan="7" class="py-6 text-center text-slate-500">Cargando usuarios...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="admin-users-pagination" class="px-4 py-3 bg-slate-900/50 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================================= -->
+            <!-- SECTION: ADMIN — RESULTADOS Y TRAZABILIDAD POR USUARIO                  -->
+            <!-- ======================================================================= -->
+            <section id="view-admin-results" class="hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>📈</span> Resultados y Trazabilidad por Usuario
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Selecciona cualquier usuario para inspeccionar su historial de exámenes, correcciones, mapa de calor, evolución y actividad SRS</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="exportAdminResultsCsv()" class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer">
+                            <span>📥 Exportar CSV Global</span>
+                        </button>
+                        <button onclick="loadAdminUsersKpiList()" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+                            ↻ Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabla Resumen de KPIs por Usuario -->
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 overflow-hidden shadow-md">
+                    <div class="px-5 py-3.5 bg-slate-900/60 border-b border-slate-700/80 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-white">Resumen de Rendimiento por Usuario</h3>
+                        <span class="text-[11px] text-slate-400">Haz clic en "Ver Detalle" para abrir la trazabilidad completa</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="uppercase bg-slate-900/40 text-slate-400 border-b border-slate-700 text-[11px]">
+                                <tr>
+                                    <th class="py-3 px-4">Usuario</th>
+                                    <th class="py-3 px-4 text-center">Nº Exámenes</th>
+                                    <th class="py-3 px-4 text-center">Nota Media</th>
+                                    <th class="py-3 px-4 text-center">Readiness Score</th>
+                                    <th class="py-3 px-4 text-center">Dominadas (SM-2)</th>
+                                    <th class="py-3 px-4">Último Intento</th>
+                                    <th class="py-3 px-4">Último Acceso</th>
+                                    <th class="py-3 px-4 text-right">Detalle</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-results-kpi-tbody" class="divide-y divide-slate-700/60">
+                                <tr><td colspan="8" class="py-6 text-center text-slate-500">Cargando métricas de usuarios...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Panel de Detalle de un Usuario Seleccionado -->
+                <div id="admin-user-detail-panel" class="hidden space-y-6 bg-slate-900/75 p-6 rounded-3xl border border-indigo-500/40 shadow-2xl">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-xl font-bold text-white shadow-lg">
+                                👤
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 id="admin-detail-user-name" class="text-lg font-extrabold text-white">Nombre de Usuario</h3>
+                                    <span id="admin-detail-user-role" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">USER</span>
+                                </div>
+                                <p id="admin-detail-user-meta" class="text-xs text-slate-400 font-mono">@username • email@fhir.local</p>
+                            </div>
+                        </div>
+
+                        <!-- Filtros del Detalle + Exportar CSV del Usuario -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select id="admin-detail-mode-filter" onchange="reloadSelectedAdminUserDetail()" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200">
+                                <option value="">Todos los Modos</option>
+                                <option value="SIMULATION">SIMULATION</option>
+                                <option value="ADAPTIVE">ADAPTIVE</option>
+                                <option value="TUTOR">TUTOR</option>
+                                <option value="ERRORS">ERRORS</option>
+                            </select>
+                            <input id="admin-detail-from-date" type="date" onchange="reloadSelectedAdminUserDetail()" class="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200" title="Desde fecha">
+                            <input id="admin-detail-to-date" type="date" onchange="reloadSelectedAdminUserDetail()" class="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200" title="Hasta fecha">
+                            <button onclick="exportAdminSelectedUserCsv()" class="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer flex items-center gap-1">
+                                <span>📥 CSV Usuario</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- KPIs Rápidos del Usuario + Actividad SRS -->
+                    <div id="admin-detail-kpi-cards" class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                    </div>
+
+                    <!-- Heatmap por las 6 áreas del Syllabus para este Usuario -->
+                    <div class="bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+                        <h4 class="text-sm font-bold text-white">🗺️ Mapa de Calor por Áreas del Syllabus (Usuario)</h4>
+                        <div id="admin-detail-heatmap-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        </div>
+                    </div>
+
+                    <!-- Curva de Evolución + Historial de Intentos -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        <div class="lg:col-span-7 bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+                            <h4 class="text-sm font-bold text-white">🕒 Historial de Intentos del Usuario</h4>
+                            <div class="overflow-x-auto max-h-[380px]">
+                                <table class="w-full text-left text-xs text-slate-300">
+                                    <thead class="uppercase bg-slate-900 text-slate-400 border-b border-slate-800 text-[10px] sticky top-0">
+                                        <tr>
+                                            <th class="py-2 px-3">#</th>
+                                            <th class="py-2 px-3">Fecha</th>
+                                            <th class="py-2 px-3">Modo</th>
+                                            <th class="py-2 px-3">Nota</th>
+                                            <th class="py-2 px-3">Aciertos</th>
+                                            <th class="py-2 px-3">Duración</th>
+                                            <th class="py-2 px-3 text-right">Revisión</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-detail-attempts-tbody" class="divide-y divide-slate-800/70 font-mono">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-5 bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+                            <h4 class="text-sm font-bold text-white">⚠️ Preguntas Más Falladas por este Usuario</h4>
+                            <div id="admin-detail-failed-questions" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================================= -->
+            <!-- SECTION: ADMIN — VISTA AGREGADA GLOBAL & RANKING                        -->
+            <!-- ======================================================================= -->
+            <section id="view-admin-aggregate" class="hidden space-y-6">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>🌐</span> Analítica Global Agregada & Comparativa
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Rendimiento global por área del syllabus, preguntas con mayor tasa de fallo y comparativa de usuarios</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="admin-agg-user-filter" onchange="loadAdminAggregateView()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200">
+                            <option value="">Todos los Usuarios</option>
+                        </select>
+                        <select id="admin-agg-mode-filter" onchange="loadAdminAggregateView()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200">
+                            <option value="">Todos los Modos</option>
+                            <option value="SIMULATION">SIMULATION</option>
+                            <option value="ADAPTIVE">ADAPTIVE</option>
+                            <option value="TUTOR">TUTOR</option>
+                            <option value="ERRORS">ERRORS</option>
+                        </select>
+                        <input id="admin-agg-from-date" type="date" onchange="loadAdminAggregateView()" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200">
+                        <input id="admin-agg-to-date" type="date" onchange="loadAdminAggregateView()" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200">
+                        <button onclick="exportAdminAggregateFilteredCsv()" class="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
+                            📥 Exportar CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPIs Globales -->
+                <div id="admin-agg-kpi-cards" class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                </div>
+
+                <!-- Media Global por Área del Syllabus -->
+                <div class="bg-slate-800/80 p-6 rounded-2xl border border-slate-700/80 space-y-4">
+                    <h3 class="text-sm font-bold text-white">🗺️ Precisión Media Global por las 6 Áreas del Syllabus</h3>
+                    <div id="admin-agg-topics-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    </div>
+                </div>
+
+                <!-- Preguntas más falladas globalmente + Ranking -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                    <div class="lg:col-span-6 bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 space-y-3">
+                        <h3 class="text-sm font-bold text-white">🔥 Top Preguntas con Mayor Tasa de Fallo Global</h3>
+                        <div id="admin-agg-failed-questions" class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                        </div>
+                    </div>
+                    <div class="lg:col-span-6 bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 space-y-3">
+                        <h3 class="text-sm font-bold text-white">🏆 Ranking y Comparativa de Preparación</h3>
+                        <div class="overflow-x-auto max-h-[420px]">
+                            <table class="w-full text-left text-xs text-slate-300">
+                                <thead class="uppercase bg-slate-900/70 text-slate-400 border-b border-slate-700 text-[10px]">
+                                    <tr>
+                                        <th class="py-2.5 px-3">#</th>
+                                        <th class="py-2.5 px-3">Usuario</th>
+                                        <th class="py-2.5 px-3 text-center">Readiness</th>
+                                        <th class="py-2.5 px-3 text-center">Nota Media</th>
+                                        <th class="py-2.5 px-3 text-center">Exámenes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-agg-ranking-tbody" class="divide-y divide-slate-700/60">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================================= -->
+            <!-- SECTION: ADMIN — REGISTRO DE AUDITORÍA                                  -->
+            <!-- ======================================================================= -->
+            <section id="view-admin-audit" class="hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>📋</span> Registro de Auditoría y Seguridad
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Trazabilidad inmutable de inicios de sesión, bloqueos, gestión de cuentas y borrados lógicos</p>
+                    </div>
+                    <button onclick="loadAdminAuditLogs(0)" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+                        ↻ Actualizar
+                    </button>
+                </div>
+
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 overflow-hidden shadow-md">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="uppercase bg-slate-900/70 text-slate-400 border-b border-slate-700 text-[11px]">
+                                <tr>
+                                    <th class="py-3 px-4">Fecha / Hora</th>
+                                    <th class="py-3 px-4">Actor</th>
+                                    <th class="py-3 px-4">Acción</th>
+                                    <th class="py-3 px-4">Entidad</th>
+                                    <th class="py-3 px-4">Detalle</th>
+                                    <th class="py-3 px-4">IP</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-audit-tbody" class="divide-y divide-slate-700/60 font-mono text-[11px]">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
+    </div> <!-- Fin #app-authenticated-shell -->
 
     <!-- Modal: Iniciar Examen Personalizado -->
     <div id="modal-new-exam" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2218,6 +2594,174 @@
         </div>
     </div>
 
+    <!-- Modal: Cambiar Contraseña (Obligatorio en primer acceso o voluntario desde perfil) -->
+    <div id="modal-change-password" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-base">🔑</span>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Actualizar Contraseña</h3>
+                        <p class="text-[11px] text-slate-400">Política de seguridad: mínimo 10 caracteres</p>
+                    </div>
+                </div>
+                <button id="btn-close-change-pwd" type="button" onclick="closeModal('modal-change-password')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+
+            <div id="change-pwd-mandatory-banner" class="hidden p-3 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs leading-relaxed">
+                ⚠️ <strong>Cambio obligatorio en primer acceso:</strong> Por seguridad, debes establecer una contraseña personal antes de continuar usando la aplicación.
+            </div>
+
+            <form id="change-password-form" onsubmit="submitChangePassword(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Contraseña Actual:</label>
+                    <input id="cp-current-password" type="password" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Nueva Contraseña (mín. 10 caracteres):</label>
+                    <input id="cp-new-password" type="password" minlength="10" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Confirmar Nueva Contraseña:</label>
+                    <input id="cp-confirm-password" type="password" minlength="10" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button id="btn-cancel-change-pwd" type="button" onclick="closeModal('modal-change-password')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-md shadow-blue-600/25">
+                        Guardar Contraseña
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Crear / Editar Usuario (Solo ADMIN) -->
+    <div id="modal-admin-user-form" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 id="admin-user-modal-title" class="text-base font-bold text-white">Crear Nuevo Usuario</h3>
+                <button type="button" onclick="closeModal('modal-admin-user-form')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+
+            <form id="admin-user-form" onsubmit="submitAdminUserForm(event)" class="space-y-3 text-xs">
+                <input id="admin-form-user-id" type="hidden">
+                <div id="admin-form-username-group">
+                    <label class="block text-slate-300 font-semibold mb-1">Username (identificador único):</label>
+                    <input id="admin-form-username" type="text" placeholder="Ej: jperez" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Nombre Visible:</label>
+                    <input id="admin-form-display-name" type="text" required placeholder="Ej: Juan Pérez" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Correo Electrónico:</label>
+                    <input id="admin-form-email" type="email" required placeholder="Ej: jperez@hospital.org" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Rol del Sistema:</label>
+                    <select id="admin-form-role" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                        <option value="USER">USER (Estudio y Exámenes Propios)</option>
+                        <option value="ADMIN">ADMIN (Gestión Global y Trazabilidad)</option>
+                    </select>
+                </div>
+                <div id="admin-form-password-group">
+                    <label class="block text-slate-300 font-semibold mb-1">Contraseña Inicial (Opcional, mín. 10 caracteres):</label>
+                    <input id="admin-form-password" type="text" placeholder="Dejar vacío para autogenerar contraseña temporal segura" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-admin-user-form')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-md shadow-blue-600/25">
+                        Guardar Usuario
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Mostrar Contraseña Temporal Generada (Solo una vez) -->
+    <div id="modal-temp-password" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-lg">🔐</div>
+                <div>
+                    <h3 class="text-base font-bold text-white">Credencial Temporal Generada</h3>
+                    <p class="text-xs text-slate-400">Copia esta contraseña ahora; no volverá a mostrarse en texto claro.</p>
+                </div>
+            </div>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Usuario:</span>
+                    <span id="temp-pwd-username" class="font-mono font-bold text-white">usuario</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Contraseña Temporal:</span>
+                    <code id="temp-pwd-value" class="px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono font-bold text-sm select-all">••••••••</code>
+                </div>
+            </div>
+            <p class="text-[11px] text-amber-300/90">
+                ℹ️ El usuario deberá cambiar esta contraseña obligatoriamente en su próximo inicio de sesión (`mustChangePassword = true`).
+            </p>
+            <div class="flex justify-end">
+                <button type="button" onclick="closeModal('modal-temp-password')" class="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Revisión Detallada de Intento de Examen (Para Historial Propio o Admin) -->
+    <div id="modal-attempt-review-detail" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div>
+                    <h3 id="attempt-review-modal-title" class="text-base font-bold text-white">Revisión Detallada del Intento</h3>
+                    <p id="attempt-review-modal-subtitle" class="text-xs text-slate-400 font-mono mt-0.5"></p>
+                </div>
+                <button type="button" onclick="closeModal('modal-attempt-review-detail')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+            <div id="attempt-review-modal-body" class="flex-1 overflow-y-auto space-y-4 pr-1">
+            </div>
+            <div class="flex justify-end pt-3 border-t border-slate-800 shrink-0">
+                <button type="button" onclick="closeModal('modal-attempt-review-detail')" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Material Existente (Propietario o ADMIN) -->
+    <div id="modal-edit-material" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white">✏️ Editar Material de Estudio</h3>
+                <button type="button" onclick="closeModal('modal-edit-material')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+            <form onsubmit="submitEditMaterialForm(event)" class="space-y-3 text-xs">
+                <input id="edit-mat-id" type="hidden">
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Título del Material:</label>
+                    <input id="edit-mat-title" type="text" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Contenido (Texto / Markdown):</label>
+                    <textarea id="edit-mat-content" rows="10" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-slate-200 font-mono focus:outline-none focus:border-blue-500"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-edit-material')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
+                        Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal: Confirmación Elegante (Reemplazo no bloqueante de window.confirm) -->
     <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl modal-box">
@@ -2248,6 +2792,6 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=2.0.16"></script>
+    <script src="/app.js?v=3.0.0"></script>
 </body>
 </html>

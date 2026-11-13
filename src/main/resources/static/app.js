@@ -1,4 +1,8 @@
 // Estado global de la aplicación
+let currentUser = null;
+let isMandatoryPasswordChange = false;
+let editingQuestionId = null;
+
 let currentSession = null;
 let currentQuestionIndex = 0;
 let userAnswers = {}; // questionId -> { selectedOptions, timeSpentSeconds, flagged }
@@ -13,11 +17,61 @@ let allMaterials = [];
 let dueFlashcards = [];
 let currentFlashcardIndex = 0;
 
+// =================== CENTRAL FETCH WRAPPER (CSRF + 401/403 UNIFICADO) ===================
+const nativeFetch = window.fetch.bind(window);
+
+function getCsrfTokenFromCookie() {
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function apiFetch(url, options = {}) {
+    const opts = { ...options };
+    opts.credentials = opts.credentials || 'same-origin';
+
+    const method = (opts.method || 'GET').toUpperCase();
+    const headers = new Headers(opts.headers || {});
+
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const csrfToken = getCsrfTokenFromCookie();
+        if (csrfToken && !headers.has('X-XSRF-TOKEN')) {
+            headers.set('X-XSRF-TOKEN', csrfToken);
+        }
+    }
+    opts.headers = headers;
+
+    const resp = await nativeFetch(url, opts);
+
+    const urlStr = typeof url === 'string' ? url : (url.url || '');
+    const isAuthProbe = urlStr.includes('/api/auth/me') || urlStr.includes('/api/auth/login');
+
+    if (resp.status === 401 && !isAuthProbe) {
+        currentUser = null;
+        showLoginScreen('Tu sesión ha expirado o no estás autenticado. Por favor inicia sesión.');
+    } else if (resp.status === 403 && !isAuthProbe) {
+        const cloned = resp.clone();
+        cloned.json().then(data => {
+            if (data && data.mustChangePassword) {
+                openChangePasswordModal(true);
+            }
+        }).catch(() => {});
+    }
+
+    return resp;
+}
+
+// Interceptar todas las llamadas a window.fetch hacia /api/** para garantizar envío de X-XSRF-TOKEN y manejo 401/403
+window.fetch = function(input, init) {
+    const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+    if (urlStr.startsWith('/api/')) {
+        return apiFetch(input, init);
+    }
+    return nativeFetch(input, init);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
-    loadTopics();
-    loadDashboard();
-    loadMaterials();
     setupModalInteractions();
+    initAuthAndBootstrapApp();
 });
 
 // =================== TOAST NOTIFICATIONS & CONFIRM DIALOG ===================
@@ -203,10 +257,16 @@ function openMaterialsSection(subview = 'docs') {
 }
 
 function switchTab(tabId, materialSubview = null) {
+    if (tabId.startsWith('admin-') && (!currentUser || currentUser.role !== 'ADMIN')) {
+        showToast('Acceso restringido a administradores.', 'error');
+        return;
+    }
+
     const views = [
         'dashboard', 'exam-modes', 'exam-runner', 'exam-result',
         'search-builder', 'resource-inspector', 'flashcards',
-        'questions', 'materials'
+        'questions', 'materials',
+        'admin-users', 'admin-results', 'admin-aggregate', 'admin-audit'
     ];
 
     views.forEach(v => {
@@ -246,6 +306,10 @@ function switchTab(tabId, materialSubview = null) {
     if (tabId === 'dashboard') loadDashboard();
     if (tabId === 'flashcards') loadFlashcards();
     if (tabId === 'questions') loadQuestions();
+    if (tabId === 'admin-users') loadAdminUsers(0);
+    if (tabId === 'admin-results') loadAdminUsersKpiList();
+    if (tabId === 'admin-aggregate') loadAdminAggregateView();
+    if (tabId === 'admin-audit') loadAdminAuditLogs(0);
 }
 
 // =================== TEMAS DEL TEMARIO ===================
@@ -393,10 +457,13 @@ async function loadDashboard() {
                     <td class="py-2.5 px-4 text-xs text-slate-300">${formatDate(a.finishedAt || a.startedAt)}</td>
                     <td class="py-2.5 px-4 font-bold ${isPass ? 'text-emerald-400' : 'text-rose-400'}">${(a.scorePercent || 0).toFixed(1)}%</td>
                     <td class="py-2.5 px-4 text-xs">${a.correctQuestions}/${a.totalQuestions}</td>
-                    <td class="py-2.5 px-4">
+                    <td class="py-2.5 px-4 flex items-center gap-2">
                         <span class="px-2 py-0.5 text-[10px] font-bold rounded-full ${isPass ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">
                             ${isPass ? 'APROBADO' : 'SUSPENSO'}
                         </span>
+                        <button onclick="openAttemptReviewModal(${a.id})" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-blue-300 border border-slate-700 text-[10px] font-semibold transition cursor-pointer">
+                            👁️ Ver
+                        </button>
                     </td>
                 `;
                 table.appendChild(tr);
@@ -1207,10 +1274,17 @@ function renderQuestionsList(questions) {
             `).join('');
         }
 
+        const canEditQ = canModifyItem(q);
+        const isOwnQ = currentUser && q.ownerId === currentUser.id;
+        const ownerBadge = isOwnQ
+            ? '<span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">👤 Creada por ti</span>'
+            : `<span class="px-2 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-mono">Autor #${q.ownerId || 1}</span>`;
+
         card.innerHTML = `
-            <div class="flex items-center justify-between text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span class="font-semibold text-blue-400">${q.topic ? q.topic.name : 'General'}</span>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    ${ownerBadge}
                     <span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">${q.source}</span>
                     <span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px]">Dificultad: ${q.difficulty}/3</span>
                 </div>
@@ -1224,11 +1298,21 @@ function renderQuestionsList(questions) {
                 ${optionsHtml}
             </div>
 
-            <div class="pt-2 flex justify-between items-center text-xs">
+            <div class="pt-2 flex flex-wrap justify-between items-center gap-2 text-xs">
                 <span class="text-slate-400">${q.fhirSpecUrl ? `<a href="${q.fhirSpecUrl}" target="_blank" class="text-blue-400 hover:underline">hl7.org/fhir →</a>` : ''}</span>
-                <button onclick="createMirrorVariant(${q.id})" class="px-3 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition">
-                    ✨ Clonar y Generar Variante
-                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="createMirrorVariant(${q.id})" class="px-3 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition cursor-pointer">
+                        ✨ Clonar y Generar Variante
+                    </button>
+                    ${canEditQ ? `
+                        <button onclick="openEditQuestionModal(${q.id})" class="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition cursor-pointer">
+                            ✏️ Editar
+                        </button>
+                        <button onclick="deleteQuestionById(${q.id})" class="px-2.5 py-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-500/30 text-xs font-medium transition cursor-pointer">
+                            🗑️
+                        </button>
+                    ` : ''}
+                </div>
             </div>
         `;
         container.appendChild(card);
@@ -1479,9 +1563,14 @@ function renderMaterials(list) {
                     <!-- Subtle Secondary Utility Icons -->
                     <div class="flex items-center gap-1 shrink-0">
                         ${utilityBtnHtml}
-                        <button type="button" onclick="deleteMaterial(${m.id})" title="Eliminar documento" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-rose-950/80 text-slate-500 hover:text-rose-400 border border-slate-700/70 hover:border-rose-500/40 flex items-center justify-center text-xs transition cursor-pointer">
-                            🗑️
-                        </button>
+                        ${canModifyItem(m) ? `
+                            <button type="button" onclick="openEditMaterialModal(${m.id})" title="Editar documento" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/70 flex items-center justify-center text-xs transition cursor-pointer">
+                                ✏️
+                            </button>
+                            <button type="button" onclick="deleteMaterial(${m.id})" title="Eliminar documento" class="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-rose-950/80 text-slate-500 hover:text-rose-400 border border-slate-700/70 hover:border-rose-500/40 flex items-center justify-center text-xs transition cursor-pointer">
+                                🗑️
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -2176,6 +2265,24 @@ async function submitCreateTopic() {
 }
 
 function openCreateQuestionModal() {
+    editingQuestionId = null;
+    const modal = document.getElementById('modal-create-question');
+    if (modal) {
+        const titleEl = modal.querySelector('h3');
+        if (titleEl) titleEl.textContent = 'Crear Nueva Pregunta';
+    }
+    document.getElementById('new-q-stem').value = '';
+    document.getElementById('new-q-snippet').value = '';
+    document.getElementById('new-q-explanation').value = '';
+    document.getElementById('new-q-url').value = '';
+    document.getElementById('new-q-opt-a').value = '';
+    document.getElementById('new-q-opt-b').value = '';
+    document.getElementById('new-q-opt-c').value = '';
+    document.getElementById('new-q-opt-d').value = '';
+    document.getElementById('new-q-why-a').value = '';
+    document.getElementById('new-q-why-b').value = '';
+    document.getElementById('new-q-why-c').value = '';
+    document.getElementById('new-q-why-d').value = '';
     openModal('modal-create-question');
 }
 
@@ -2225,32 +2332,28 @@ async function submitCreateQuestion() {
         options
     };
 
+    const isEdit = editingQuestionId != null;
+    const endpoint = isEdit ? `/api/questions/${editingQuestionId}` : '/api/questions';
+    const method = isEdit ? 'PUT' : 'POST';
+
     try {
-        const resp = await fetch('/api/questions', {
-            method: 'POST',
+        const resp = await fetch(endpoint, {
+            method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         if (resp.ok) {
             closeModal('modal-create-question');
-            document.getElementById('new-q-stem').value = '';
-            document.getElementById('new-q-snippet').value = '';
-            document.getElementById('new-q-explanation').value = '';
-            document.getElementById('new-q-opt-a').value = '';
-            document.getElementById('new-q-opt-b').value = '';
-            document.getElementById('new-q-opt-c').value = '';
-            document.getElementById('new-q-opt-d').value = '';
-            if (document.getElementById('new-q-material-id')) {
-                document.getElementById('new-q-material-id').value = '';
-            }
+            editingQuestionId = null;
             await loadQuestions();
             await loadDashboard();
-            showToast('¡Pregunta creada y añadida al banco y al sistema SM-2!', 'success');
+            showToast(isEdit ? '¡Pregunta actualizada correctamente!' : '¡Pregunta creada y añadida al banco y al sistema SM-2!', 'success');
         } else {
-            showToast('Error al guardar la pregunta.', 'error');
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'Error al guardar la pregunta.', 'error');
         }
     } catch (e) {
-        console.error('Error creando pregunta:', e);
+        console.error('Error guardando pregunta:', e);
         showToast('Error de red al guardar la pregunta.', 'error');
     }
 }
@@ -4488,6 +4591,923 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+// =======================================================================
+// AUTENTICACIÓN, SESIÓN DE USUARIO Y CONTROL DE PROPIEDAD
+// =======================================================================
+
+function canModifyItem(item) {
+    if (!currentUser || !item) return false;
+    if (currentUser.role === 'ADMIN') return true;
+    return item.ownerId != null && item.ownerId === currentUser.id;
+}
+
+async function initAuthAndBootstrapApp() {
+    try {
+        const resp = await apiFetch('/api/auth/me');
+        if (resp.ok) {
+            const user = await resp.json();
+            showAuthenticatedApp(user);
+        } else {
+            showLoginScreen();
+        }
+    } catch (e) {
+        showLoginScreen();
+    }
+}
+
+function showLoginScreen(errorMsg = null) {
+    currentUser = null;
+    const loginScreen = document.getElementById('auth-login-screen');
+    const appShell = document.getElementById('app-authenticated-shell');
+    if (appShell) appShell.classList.add('hidden');
+    if (loginScreen) loginScreen.classList.remove('hidden');
+
+    const errBox = document.getElementById('login-error-box');
+    const errText = document.getElementById('login-error-text');
+    if (errorMsg && errBox && errText) {
+        errText.textContent = errorMsg;
+        errBox.classList.remove('hidden');
+    } else if (errBox) {
+        errBox.classList.add('hidden');
+    }
+}
+
+function showAuthenticatedApp(user) {
+    currentUser = user;
+    const loginScreen = document.getElementById('auth-login-screen');
+    const appShell = document.getElementById('app-authenticated-shell');
+    if (loginScreen) loginScreen.classList.add('hidden');
+    if (appShell) appShell.classList.remove('hidden');
+
+    // Actualizar widget de usuario en la cabecera
+    const displayNameEl = document.getElementById('user-display-name');
+    const usernameEl = document.getElementById('user-username-label');
+    const roleBadgeEl = document.getElementById('user-role-badge');
+    const avatarEl = document.getElementById('user-avatar-badge');
+
+    if (displayNameEl) displayNameEl.textContent = user.displayName || user.username;
+    if (usernameEl) usernameEl.textContent = `@${user.username}`;
+    if (avatarEl) {
+        const initial = (user.displayName || user.username || 'U').trim().charAt(0).toUpperCase();
+        avatarEl.textContent = initial;
+    }
+    if (roleBadgeEl) {
+        roleBadgeEl.textContent = user.role;
+        if (user.role === 'ADMIN') {
+            roleBadgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+        } else {
+            roleBadgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30';
+        }
+    }
+
+    // Mostrar u ocultar menú de administración según rol
+    const adminSection = document.getElementById('sidebar-admin-section');
+    if (adminSection) {
+        if (user.role === 'ADMIN') {
+            adminSection.classList.remove('hidden');
+        } else {
+            adminSection.classList.add('hidden');
+        }
+    }
+
+    if (user.mustChangePassword) {
+        openChangePasswordModal(true);
+        return;
+    }
+
+    // Cargar datos iniciales del usuario autenticado
+    loadTopics();
+    loadDashboard();
+    loadMaterials();
+}
+
+async function submitLogin(event) {
+    event.preventDefault();
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    const submitBtn = document.getElementById('btn-login-submit');
+    const errBox = document.getElementById('login-error-box');
+    const errText = document.getElementById('login-error-text');
+
+    if (errBox) errBox.classList.add('hidden');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+        // Asegurar cookie CSRF antes del POST /api/auth/login
+        if (!getCsrfTokenFromCookie()) {
+            await nativeFetch('/api/auth/me', { credentials: 'same-origin' });
+        }
+
+        const resp = await apiFetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: usernameInput.value.trim(),
+                password: passwordInput.value
+            })
+        });
+
+        if (resp.ok) {
+            const user = await resp.json();
+            passwordInput.value = '';
+            showToast(`Bienvenido/a, ${user.displayName || user.username}`, 'success');
+            showAuthenticatedApp(user);
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            const msg = err.error || 'Usuario o contraseña incorrectos.';
+            if (errBox && errText) {
+                errText.textContent = msg;
+                errBox.classList.remove('hidden');
+            } else {
+                showToast(msg, 'error');
+            }
+        }
+    } catch (e) {
+        if (errBox && errText) {
+            errText.textContent = 'Error de conexión con el servidor.';
+            errBox.classList.remove('hidden');
+        }
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+async function handleLogout() {
+    try {
+        await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+        // Ignorar errores de red al salir
+    }
+    currentUser = null;
+    switchTab('dashboard');
+    showLoginScreen();
+    showToast('Sesión cerrada correctamente.', 'info');
+}
+
+function openChangePasswordModal(mandatory = false) {
+    isMandatoryPasswordChange = Boolean(mandatory);
+    document.getElementById('cp-current-password').value = '';
+    document.getElementById('cp-new-password').value = '';
+    document.getElementById('cp-confirm-password').value = '';
+
+    const banner = document.getElementById('change-pwd-mandatory-banner');
+    const closeBtn = document.getElementById('btn-close-change-pwd');
+    const cancelBtn = document.getElementById('btn-cancel-change-pwd');
+
+    if (isMandatoryPasswordChange) {
+        if (banner) banner.classList.remove('hidden');
+        if (closeBtn) closeBtn.classList.add('hidden');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+    } else {
+        if (banner) banner.classList.add('hidden');
+        if (closeBtn) closeBtn.classList.remove('hidden');
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+    }
+
+    openModal('modal-change-password');
+}
+
+async function submitChangePassword(event) {
+    event.preventDefault();
+    const currentPassword = document.getElementById('cp-current-password').value;
+    const newPassword = document.getElementById('cp-new-password').value;
+    const confirmPassword = document.getElementById('cp-confirm-password').value;
+
+    if (newPassword.length < 10) {
+        showToast('La nueva contraseña debe tener al menos 10 caracteres.', 'warning');
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        showToast('La confirmación de la nueva contraseña no coincide.', 'warning');
+        return;
+    }
+
+    try {
+        const resp = await apiFetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+        if (resp.ok) {
+            const updatedUser = await resp.json();
+            currentUser = updatedUser;
+            isMandatoryPasswordChange = false;
+            closeModal('modal-change-password');
+            showToast('Contraseña actualizada correctamente.', 'success');
+            loadTopics();
+            loadDashboard();
+            loadMaterials();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo actualizar la contraseña.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al cambiar la contraseña.', 'error');
+    }
+}
+
+// =================== EDICIÓN Y BORRADO CON CONTROL DE PROPIEDAD ===================
+function openEditQuestionModal(questionId) {
+    const q = allQuestions.find(item => item.id === questionId);
+    if (!q) return;
+
+    editingQuestionId = q.id;
+    const modal = document.getElementById('modal-create-question');
+    if (modal) {
+        const titleEl = modal.querySelector('h3');
+        if (titleEl) titleEl.textContent = `✏️ Editar Pregunta #${q.id}`;
+    }
+
+    if (q.topic && document.getElementById('new-q-topic-id')) {
+        document.getElementById('new-q-topic-id').value = q.topic.id;
+    }
+    if (document.getElementById('new-q-difficulty')) {
+        document.getElementById('new-q-difficulty').value = q.difficulty || 2;
+    }
+    if (document.getElementById('new-q-material-id')) {
+        document.getElementById('new-q-material-id').value = q.materialId || '';
+    }
+    document.getElementById('new-q-stem').value = q.stem || '';
+    document.getElementById('new-q-snippet').value = q.codeSnippet || '';
+    document.getElementById('new-q-explanation').value = q.explanation || '';
+    document.getElementById('new-q-url').value = q.fhirSpecUrl || '';
+
+    const labels = ['a', 'b', 'c', 'd'];
+    labels.forEach(l => {
+        document.getElementById(`new-q-opt-${l}`).value = '';
+        document.getElementById(`new-q-why-${l}`).value = '';
+    });
+
+    if (q.options) {
+        q.options.forEach(o => {
+            const lbl = (o.optionLabel || '').toLowerCase();
+            if (labels.includes(lbl)) {
+                document.getElementById(`new-q-opt-${lbl}`).value = o.optionText || '';
+                document.getElementById(`new-q-why-${lbl}`).value = o.distractorReason || '';
+                if (o.correct) {
+                    const radio = document.querySelector(`input[name="new-q-correct"][value="${o.optionLabel}"]`);
+                    if (radio) radio.checked = true;
+                }
+            }
+        });
+    }
+
+    openModal('modal-create-question');
+}
+
+async function deleteQuestionById(questionId) {
+    const confirmed = await showConfirmDialog(
+        '¿Eliminar esta pregunta?',
+        `Se aplicará baja lógica (soft-delete) a la pregunta #${questionId} para no alterar los resultados históricos.`,
+        { confirmText: 'Eliminar', danger: true }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/questions/${questionId}`, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('Pregunta eliminada correctamente.', 'success');
+            await loadQuestions();
+            await loadDashboard();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No tienes permiso para eliminar esta pregunta.', 'error');
+        }
+    } catch (e) {
+        showToast('Error al eliminar la pregunta.', 'error');
+    }
+}
+
+function openEditMaterialModal(materialId) {
+    const m = allMaterials.find(item => item.id === materialId);
+    if (!m) return;
+    document.getElementById('edit-mat-id').value = m.id;
+    document.getElementById('edit-mat-title').value = m.title || '';
+    document.getElementById('edit-mat-content').value = m.contentText || '';
+    openModal('modal-edit-material');
+}
+
+async function submitEditMaterialForm(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-mat-id').value;
+    const title = document.getElementById('edit-mat-title').value.trim();
+    const content = document.getElementById('edit-mat-content').value;
+
+    try {
+        const resp = await apiFetch(`/api/materials/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+        });
+        if (resp.ok) {
+            closeModal('modal-edit-material');
+            showToast('Material actualizado con éxito.', 'success');
+            await loadMaterials();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo actualizar el material.', 'error');
+        }
+    } catch (e) {
+        showToast('Error al actualizar el material.', 'error');
+    }
+}
+
+// =======================================================================
+// MÓDULOS DE ADMINISTRACIÓN (SOLO ROL ADMIN)
+// =======================================================================
+let adminUsersCache = [];
+let selectedAdminUserId = null;
+
+async function loadAdminUsers(page = 0) {
+    const search = document.getElementById('admin-users-search')?.value || '';
+    const role = document.getElementById('admin-users-role-filter')?.value || '';
+    const active = document.getElementById('admin-users-active-filter')?.value || '';
+
+    const params = new URLSearchParams({ page, size: 20 });
+    if (search.trim()) params.append('search', search.trim());
+    if (role) params.append('role', role);
+    if (active !== '') params.append('active', active);
+
+    try {
+        const resp = await apiFetch(`/api/admin/users?${params.toString()}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        adminUsersCache = data.content || [];
+        renderAdminUsersTable(adminUsersCache, data);
+    } catch (e) {
+        console.error('Error cargando usuarios:', e);
+    }
+}
+
+function renderAdminUsersTable(users, pageData) {
+    const tbody = document.getElementById('admin-users-table-body');
+    const pagDiv = document.getElementById('admin-users-pagination');
+    if (!tbody) return;
+
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">No se encontraron usuarios con esos filtros.</td></tr>';
+        if (pagDiv) pagDiv.innerHTML = '';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/50 transition';
+
+        const roleBadge = u.role === 'ADMIN'
+            ? '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">ADMIN</span>'
+            : '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">USER</span>';
+
+        const statusBadge = u.active
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ACTIVO</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">INACTIVO</span>';
+
+        const isSelf = currentUser && currentUser.id === u.id;
+
+        tr.innerHTML = `
+            <td class="py-3 px-4 font-mono text-slate-400">#${u.id}</td>
+            <td class="py-3 px-4">
+                <div class="font-bold text-white">${u.displayName || u.username}</div>
+                <div class="font-mono text-[11px] text-slate-400">@${u.username} ${u.mustChangePassword ? '<span class="text-amber-400">(Cambio pend.)</span>' : ''}</div>
+            </td>
+            <td class="py-3 px-4 font-mono text-slate-300">${u.email}</td>
+            <td class="py-3 px-4">${roleBadge}</td>
+            <td class="py-3 px-4">${statusBadge}</td>
+            <td class="py-3 px-4 font-mono text-[11px] text-slate-400">${u.lastLoginAt || 'Nunca'}</td>
+            <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                <button onclick="inspectUserFromUsersTable(${u.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold cursor-pointer" title="Ver trazabilidad y exámenes">
+                    📊 Resultados
+                </button>
+                <button onclick="openEditUserModal(${u.id})" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold cursor-pointer">
+                    ✏️ Editar
+                </button>
+                <button onclick="resetAdminUserPassword(${u.id}, '${u.username}')" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-semibold cursor-pointer">
+                    🔑 Reset Pass
+                </button>
+                ${!isSelf ? `
+                    <button onclick="toggleAdminUserStatus(${u.id}, ${!u.active}, '${u.username}')" class="px-2.5 py-1 rounded-lg ${u.active ? 'bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30'} text-[11px] font-semibold cursor-pointer">
+                        ${u.active ? '🚫 Desactivar' : '✅ Activar'}
+                    </button>
+                ` : ''}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (pagDiv && pageData) {
+        pagDiv.innerHTML = `
+            <span>Total: <strong>${pageData.totalElements || users.length}</strong> usuarios</span>
+            <span>Página ${(pageData.page || 0) + 1} de ${Math.max(1, pageData.totalPages || 1)}</span>
+        `;
+    }
+}
+
+function inspectUserFromUsersTable(userId) {
+    switchTab('admin-results');
+    selectAdminUserDetail(userId);
+}
+
+function openCreateUserModal() {
+    document.getElementById('admin-user-modal-title').textContent = '➕ Crear Nuevo Usuario';
+    document.getElementById('admin-form-user-id').value = '';
+    document.getElementById('admin-form-username').value = '';
+    document.getElementById('admin-form-username').disabled = false;
+    document.getElementById('admin-form-username-group').classList.remove('hidden');
+    document.getElementById('admin-form-display-name').value = '';
+    document.getElementById('admin-form-email').value = '';
+    document.getElementById('admin-form-role').value = 'USER';
+    document.getElementById('admin-form-password').value = '';
+    document.getElementById('admin-form-password-group').classList.remove('hidden');
+    openModal('modal-admin-user-form');
+}
+
+function openEditUserModal(userId) {
+    const u = adminUsersCache.find(item => item.id === userId);
+    if (!u) return;
+
+    document.getElementById('admin-user-modal-title').textContent = `✏️ Editar Usuario @${u.username}`;
+    document.getElementById('admin-form-user-id').value = u.id;
+    document.getElementById('admin-form-username').value = u.username;
+    document.getElementById('admin-form-username').disabled = true;
+    document.getElementById('admin-form-display-name').value = u.displayName || '';
+    document.getElementById('admin-form-email').value = u.email || '';
+    document.getElementById('admin-form-role').value = u.role || 'USER';
+    document.getElementById('admin-form-password-group').classList.add('hidden');
+    openModal('modal-admin-user-form');
+}
+
+async function submitAdminUserForm(event) {
+    event.preventDefault();
+    const userId = document.getElementById('admin-form-user-id').value;
+    const username = document.getElementById('admin-form-username').value.trim();
+    const displayName = document.getElementById('admin-form-display-name').value.trim();
+    const email = document.getElementById('admin-form-email').value.trim();
+    const role = document.getElementById('admin-form-role').value;
+    const password = document.getElementById('admin-form-password').value;
+
+    const isEdit = Boolean(userId);
+    const url = isEdit ? `/api/admin/users/${userId}` : '/api/admin/users';
+    const method = isEdit ? 'PUT' : 'POST';
+    const body = isEdit
+        ? { displayName, email, role }
+        : { username, displayName, email, role, password: password || null };
+
+    try {
+        const resp = await apiFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+            closeModal('modal-admin-user-form');
+            await loadAdminUsers(0);
+            if (!isEdit && data.temporaryPassword) {
+                document.getElementById('temp-pwd-username').textContent = data.user ? data.user.username : username;
+                document.getElementById('temp-pwd-value').textContent = data.temporaryPassword;
+                openModal('modal-temp-password');
+            } else {
+                showToast('Usuario actualizado correctamente.', 'success');
+            }
+        } else {
+            showToast(data.error || 'No se pudo guardar el usuario.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al guardar el usuario.', 'error');
+    }
+}
+
+async function toggleAdminUserStatus(userId, newActive, username) {
+    const actionLabel = newActive ? 'activar' : 'desactivar';
+    const confirmed = await showConfirmDialog(
+        `¿Deseas ${actionLabel} al usuario @${username}?`,
+        newActive
+            ? `El usuario @${username} podrá volver a iniciar sesión en la plataforma.`
+            : `El usuario @${username} no podrá iniciar sesión, pero se conservará todo su historial de exámenes y trazabilidad (baja lógica).`,
+        { confirmText: newActive ? 'Activar' : 'Desactivar', danger: !newActive }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/users/${userId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: newActive })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+            showToast(`Usuario @${username} ${newActive ? 'activado' : 'desactivado'}.`, 'success');
+            await loadAdminUsers(0);
+        } else {
+            showToast(data.error || 'No se pudo cambiar el estado del usuario.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al cambiar el estado.', 'error');
+    }
+}
+
+async function resetAdminUserPassword(userId, username) {
+    const confirmed = await showConfirmDialog(
+        `¿Resetear contraseña de @${username}?`,
+        `Se generará una nueva contraseña temporal aleatoria y se forzará el cambio de contraseña en el próximo acceso de @${username}.`,
+        { confirmText: 'Generar Contraseña Temporal', danger: false }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+            await loadAdminUsers(0);
+            document.getElementById('temp-pwd-username').textContent = username;
+            document.getElementById('temp-pwd-value').textContent = data.temporaryPassword || '';
+            openModal('modal-temp-password');
+        } else {
+            showToast(data.error || 'No se pudo resetear la contraseña.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al resetear contraseña.', 'error');
+    }
+}
+
+// =================== RESULTADOS Y TRAZABILIDAD POR USUARIO (ADMIN) ===================
+async function loadAdminUsersKpiList() {
+    const tbody = document.getElementById('admin-results-kpi-tbody');
+    if (!tbody) return;
+
+    try {
+        const resp = await apiFetch('/api/admin/results/users');
+        if (!resp.ok) return;
+        const kpis = await resp.json();
+
+        // Poblar también el selector de usuarios de la vista agregada
+        const aggSelect = document.getElementById('admin-agg-user-filter');
+        if (aggSelect) {
+            const currentVal = aggSelect.value;
+            aggSelect.innerHTML = '<option value="">Todos los Usuarios</option>';
+            kpis.forEach(k => {
+                const opt = document.createElement('option');
+                opt.value = k.userId;
+                opt.textContent = `${k.displayName || k.username} (@${k.username})`;
+                aggSelect.appendChild(opt);
+            });
+            aggSelect.value = currentVal;
+        }
+
+        tbody.innerHTML = '';
+        kpis.forEach(k => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-900/50 transition';
+
+            const scoreColor = k.averageScore >= 80 ? 'text-emerald-400' : (k.averageScore >= 65 ? 'text-amber-400' : 'text-rose-400');
+            const readyColor = k.readinessScore >= 80 ? 'text-emerald-400' : (k.readinessScore >= 65 ? 'text-amber-400' : 'text-blue-400');
+
+            tr.innerHTML = `
+                <td class="py-3 px-4">
+                    <div class="font-bold text-white">${k.displayName || k.username}</div>
+                    <div class="font-mono text-[11px] text-slate-400">@${k.username} • ${k.role}</div>
+                </td>
+                <td class="py-3 px-4 text-center font-mono font-bold text-white">${k.totalExams} <span class="text-[10px] text-slate-400 font-normal">(${k.passedExams} aprob.)</span></td>
+                <td class="py-3 px-4 text-center font-mono font-bold ${scoreColor}">${k.totalExams > 0 ? k.averageScore.toFixed(1) + '%' : '-'}</td>
+                <td class="py-3 px-4 text-center font-mono font-bold ${readyColor}">${k.readinessScore.toFixed(1)}%</td>
+                <td class="py-3 px-4 text-center font-mono text-slate-300">${k.masteredQuestionsCount} <span class="text-[10px] text-amber-400">(${k.dueReviewsCount} pend.)</span></td>
+                <td class="py-3 px-4 font-mono text-[11px] text-slate-300">${k.lastAttemptAt ? `${formatDate(k.lastAttemptAt)} (${k.lastAttemptScore}%)` : 'Sin intentos'}</td>
+                <td class="py-3 px-4 font-mono text-[11px] text-slate-400">${k.lastLoginAt || 'Nunca'}</td>
+                <td class="py-3 px-4 text-right">
+                    <button onclick="selectAdminUserDetail(${k.userId})" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition cursor-pointer">
+                        🔍 Ver Detalle
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error('Error cargando KPIs de usuarios:', e);
+    }
+}
+
+async function selectAdminUserDetail(userId) {
+    selectedAdminUserId = userId;
+    await reloadSelectedAdminUserDetail();
+}
+
+async function reloadSelectedAdminUserDetail() {
+    if (!selectedAdminUserId) return;
+    const panel = document.getElementById('admin-user-detail-panel');
+    const mode = document.getElementById('admin-detail-mode-filter')?.value || '';
+    const fromDate = document.getElementById('admin-detail-from-date')?.value || '';
+    const toDate = document.getElementById('admin-detail-to-date')?.value || '';
+
+    const params = new URLSearchParams();
+    if (mode) params.append('mode', mode);
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+
+    try {
+        const resp = await apiFetch(`/api/admin/results/users/${selectedAdminUserId}?${params.toString()}`);
+        if (!resp.ok) return;
+        const d = await resp.json();
+
+        if (panel) {
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        document.getElementById('admin-detail-user-name').textContent = d.user.displayName || d.user.username;
+        document.getElementById('admin-detail-user-role').textContent = d.user.role;
+        document.getElementById('admin-detail-user-meta').textContent = `@${d.user.username} • ${d.user.email} • Último acceso: ${d.user.lastLoginAt || 'Nunca'}`;
+
+        // KPIs + Actividad SRS
+        const kpiContainer = document.getElementById('admin-detail-kpi-cards');
+        const srs = d.srsActivity || {};
+        kpiContainer.innerHTML = `
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Readiness Score</span>
+                <div class="text-xl font-extrabold text-blue-400 font-mono mt-1">${d.kpi.readinessScore.toFixed(1)}%</div>
+            </div>
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Exámenes Totales</span>
+                <div class="text-xl font-extrabold text-white font-mono mt-1">${d.kpi.totalExams}</div>
+            </div>
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Nota Media</span>
+                <div class="text-xl font-extrabold text-emerald-400 font-mono mt-1">${d.kpi.averageScore.toFixed(1)}%</div>
+            </div>
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Tasa Aprobado</span>
+                <div class="text-xl font-extrabold text-indigo-300 font-mono mt-1">${d.kpi.passRatePercent.toFixed(1)}%</div>
+            </div>
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Flashcards Dominadas</span>
+                <div class="text-xl font-extrabold text-emerald-300 font-mono mt-1">${srs.masteredCount || 0} / ${srs.totalTracked || 0}</div>
+            </div>
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+                <span class="text-[10px] uppercase text-slate-400 font-semibold">Factor SM-2 (EF)</span>
+                <div class="text-xl font-extrabold text-amber-300 font-mono mt-1">${srs.averageEasinessFactor || 2.5}</div>
+            </div>
+        `;
+
+        // Heatmap de las 6 áreas para este usuario
+        renderTopicCardsIntoGrid('admin-detail-heatmap-grid', d.dashboard.topicHeatmaps || []);
+
+        // Tabla de intentos
+        const attemptsTbody = document.getElementById('admin-detail-attempts-tbody');
+        attemptsTbody.innerHTML = '';
+        if (!d.attempts || d.attempts.length === 0) {
+            attemptsTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">Sin intentos registrados con los filtros actuales.</td></tr>';
+        } else {
+            d.attempts.forEach(a => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 transition';
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-blue-400 font-bold">#${a.id}</td>
+                    <td class="py-2 px-3 font-sans text-[11px]">${formatDate(a.finishedAt || a.startedAt)}</td>
+                    <td class="py-2 px-3"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">${a.mode}</span></td>
+                    <td class="py-2 px-3 font-bold ${a.passed ? 'text-emerald-400' : 'text-rose-400'}">${a.scorePercent.toFixed(1)}%</td>
+                    <td class="py-2 px-3">${a.correctQuestions}/${a.totalQuestions}</td>
+                    <td class="py-2 px-3 font-sans text-[11px] text-slate-400">${formatDurationSeconds(a.durationSeconds)}</td>
+                    <td class="py-2 px-3 text-right">
+                        <button onclick="openAttemptReviewModal(${a.id}, ${d.user.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 font-sans text-[11px] font-semibold cursor-pointer">
+                            👁️ Corrección
+                        </button>
+                    </td>
+                `;
+                attemptsTbody.appendChild(tr);
+            });
+        }
+
+        // Preguntas más falladas por este usuario
+        renderFailedQuestionsList('admin-detail-failed-questions', d.mostFailedQuestions || []);
+    } catch (e) {
+        console.error('Error cargando detalle del usuario:', e);
+    }
+}
+
+function renderTopicCardsIntoGrid(containerId, heatmaps) {
+    const grid = document.getElementById(containerId);
+    if (!grid) return;
+    grid.innerHTML = '';
+    heatmaps.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between gap-2';
+        const colorClass = t.statusColor === 'GREEN'
+            ? 'text-emerald-400'
+            : (t.statusColor === 'AMBER' ? 'text-amber-400' : (t.statusColor === 'RED' ? 'text-rose-400' : 'text-slate-400'));
+        const barColor = t.statusColor === 'GREEN'
+            ? 'bg-emerald-500'
+            : (t.statusColor === 'AMBER' ? 'bg-amber-500' : (t.statusColor === 'RED' ? 'bg-rose-500' : 'bg-slate-600'));
+
+        div.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+                <span class="text-xs font-bold text-white leading-snug">${t.name}</span>
+                <span class="font-mono text-xs font-extrabold ${colorClass}">${t.accuracyPercent.toFixed(1)}%</span>
+            </div>
+            <div class="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
+                <div class="${barColor} h-1.5 rounded-full" style="width: ${Math.min(100, t.accuracyPercent)}%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                <span>${t.correctAnswered}/${t.totalAnswered} aciertos</span>
+                <span>⏱ ${t.averageTimeSeconds}s</span>
+            </div>
+        `;
+        grid.appendChild(div);
+    });
+}
+
+function renderFailedQuestionsList(containerId, list) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!list || list.length === 0) {
+        container.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">No se registran fallos todavía.</div>';
+        return;
+    }
+    container.innerHTML = list.map(q => `
+        <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+            <div class="flex items-center justify-between text-[11px]">
+                <span class="font-mono font-bold text-indigo-400">#${q.questionId} • ${q.topicCode}</span>
+                <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono font-bold">
+                    ${q.failedCount} fallos (${q.failureRatePercent}%)
+                </span>
+            </div>
+            <p class="text-xs text-slate-200 line-clamp-2">${q.stem}</p>
+        </div>
+    `).join('');
+}
+
+async function openAttemptReviewModal(attemptId, userId = null) {
+    const endpoint = userId
+        ? `/api/admin/results/users/${userId}/attempts/${attemptId}`
+        : `/api/exams/${attemptId}`;
+
+    try {
+        const resp = await apiFetch(endpoint);
+        if (!resp.ok) {
+            showToast('No se pudo cargar el detalle del intento.', 'error');
+            return;
+        }
+        const review = await resp.json();
+
+        document.getElementById('attempt-review-modal-title').textContent = `Revisión del Intento #${review.attemptId} (${review.mode})`;
+        document.getElementById('attempt-review-modal-subtitle').textContent =
+            `Nota: ${review.scorePercent.toFixed(1)}% • Aciertos: ${review.correctCount}/${review.totalCount} • Tiempo: ${formatDurationSeconds(review.totalTimeSeconds)}`;
+
+        const body = document.getElementById('attempt-review-modal-body');
+        body.innerHTML = (review.reviews || []).map((r, idx) => `
+            <div class="p-4 rounded-2xl border ${r.correct ? 'bg-slate-950/60 border-emerald-500/30' : 'bg-slate-950/80 border-rose-500/40'} space-y-2.5 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-blue-400">Pregunta ${idx + 1} (#${r.questionId}) • ${r.topicName}</span>
+                    <span class="px-2 py-0.5 rounded-full font-bold ${r.correct ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">
+                        ${r.correct ? '✓ Correcta' : '✗ Incorrecta'} (Elegida: ${r.selectedOptions || 'Ninguna'} | Correcta: ${r.correctOptions})
+                    </span>
+                </div>
+                <div class="text-sm font-semibold text-white">${r.stem}</div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
+                    <strong class="text-blue-400">Explicación:</strong> ${r.explanation}
+                </div>
+            </div>
+        `).join('');
+
+        openModal('modal-attempt-review-detail');
+    } catch (e) {
+        showToast('Error al abrir la revisión del intento.', 'error');
+    }
+}
+
+// =================== VISTA AGREGADA GLOBAL & EXPORTACIÓN CSV (ADMIN) ===================
+async function loadAdminAggregateView() {
+    const userId = document.getElementById('admin-agg-user-filter')?.value || '';
+    const mode = document.getElementById('admin-agg-mode-filter')?.value || '';
+    const fromDate = document.getElementById('admin-agg-from-date')?.value || '';
+    const toDate = document.getElementById('admin-agg-to-date')?.value || '';
+
+    const params = new URLSearchParams();
+    if (userId) params.append('userId', userId);
+    if (mode) params.append('mode', mode);
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+
+    try {
+        const resp = await apiFetch(`/api/admin/results/aggregate?${params.toString()}`);
+        if (!resp.ok) return;
+        const agg = await resp.json();
+
+        const kpiDiv = document.getElementById('admin-agg-kpi-cards');
+        if (kpiDiv) {
+            kpiDiv.innerHTML = `
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Usuarios Activos</span>
+                    <div class="text-2xl font-extrabold text-white font-mono mt-1">${agg.activeUsers} / ${agg.totalUsers}</div>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Exámenes Completados</span>
+                    <div class="text-2xl font-extrabold text-blue-400 font-mono mt-1">${agg.totalCompletedExams}</div>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Nota Media Global</span>
+                    <div class="text-2xl font-extrabold text-emerald-400 font-mono mt-1">${agg.globalAverageScore.toFixed(1)}%</div>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Tasa Aprobado Global</span>
+                    <div class="text-2xl font-extrabold text-indigo-300 font-mono mt-1">${agg.globalPassRatePercent.toFixed(1)}%</div>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Banco de Preguntas</span>
+                    <div class="text-2xl font-extrabold text-amber-300 font-mono mt-1">${agg.totalQuestionsInBank}</div>
+                </div>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
+                    <span class="text-[10px] uppercase text-slate-400 font-semibold">Materiales Activos</span>
+                    <div class="text-2xl font-extrabold text-sky-300 font-mono mt-1">${agg.totalMaterialsCount}</div>
+                </div>
+            `;
+        }
+
+        renderTopicCardsIntoGrid('admin-agg-topics-grid', agg.topicAverages || []);
+        renderFailedQuestionsList('admin-agg-failed-questions', agg.mostFailedQuestions || []);
+
+        const rankTbody = document.getElementById('admin-agg-ranking-tbody');
+        if (rankTbody) {
+            rankTbody.innerHTML = (agg.userRanking || []).map((u, idx) => `
+                <tr class="hover:bg-slate-900/50 transition">
+                    <td class="py-2.5 px-3 font-mono font-bold text-amber-400">#${idx + 1}</td>
+                    <td class="py-2.5 px-3">
+                        <div class="font-bold text-white">${u.displayName || u.username}</div>
+                        <div class="font-mono text-[10px] text-slate-400">@${u.username}</div>
+                    </td>
+                    <td class="py-2.5 px-3 text-center font-mono font-bold text-blue-400">${u.readinessScore.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">${u.averageScore.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 text-center font-mono text-slate-300">${u.totalExams}</td>
+                </tr>
+            `).join('');
+        }
+    } catch (e) {
+        console.error('Error cargando vista agregada:', e);
+    }
+}
+
+function exportAdminResultsCsv(customParams = '') {
+    const url = `/api/admin/results/export.csv${customParams ? '?' + customParams : ''}`;
+    window.open(url, '_blank');
+}
+
+function exportAdminSelectedUserCsv() {
+    if (!selectedAdminUserId) return;
+    const mode = document.getElementById('admin-detail-mode-filter')?.value || '';
+    const fromDate = document.getElementById('admin-detail-from-date')?.value || '';
+    const toDate = document.getElementById('admin-detail-to-date')?.value || '';
+    const params = new URLSearchParams({ userId: selectedAdminUserId });
+    if (mode) params.append('mode', mode);
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    exportAdminResultsCsv(params.toString());
+}
+
+function exportAdminAggregateFilteredCsv() {
+    const userId = document.getElementById('admin-agg-user-filter')?.value || '';
+    const mode = document.getElementById('admin-agg-mode-filter')?.value || '';
+    const fromDate = document.getElementById('admin-agg-from-date')?.value || '';
+    const toDate = document.getElementById('admin-agg-to-date')?.value || '';
+    const params = new URLSearchParams();
+    if (userId) params.append('userId', userId);
+    if (mode) params.append('mode', mode);
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    exportAdminResultsCsv(params.toString());
+}
+
+// =================== REGISTRO DE AUDITORÍA (ADMIN) ===================
+async function loadAdminAuditLogs(page = 0) {
+    const tbody = document.getElementById('admin-audit-tbody');
+    if (!tbody) return;
+    try {
+        const resp = await apiFetch(`/api/admin/audit-logs?page=${page}&size=80`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const logs = data.content || [];
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-500">Sin eventos de auditoría registrados.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = logs.map(l => `
+            <tr class="hover:bg-slate-900/50 transition">
+                <td class="py-2.5 px-4 text-slate-400 whitespace-nowrap">${l.createdAt || ''}</td>
+                <td class="py-2.5 px-4 font-bold text-white">${l.actorUsername || 'SYSTEM'}</td>
+                <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">${l.action}</span></td>
+                <td class="py-2.5 px-4 text-slate-300">${l.targetType || '-'}${l.targetId ? ' #' + l.targetId : ''}</td>
+                <td class="py-2.5 px-4 font-sans text-slate-300">${l.details || ''}</td>
+                <td class="py-2.5 px-4 text-slate-500">${l.ipAddress || '-'}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('Error cargando auditoría:', e);
+    }
+}
+
 
 
 
