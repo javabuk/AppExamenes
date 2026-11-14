@@ -40,7 +40,15 @@ function resolveCertObjId(c) {
 function getActiveCertificationId() {
     const stored = localStorage.getItem('activeCertificationId');
     const storedNum = stored != null ? Number(stored) : NaN;
-    if (Number.isFinite(storedNum) && storedNum > 0) return storedNum;
+    if (Number.isFinite(storedNum) && storedNum > 0) {
+        if (currentCertifications && currentCertifications.length > 0) {
+            const match = currentCertifications.find(c => resolveCertObjId(c) === storedNum);
+            if (match) return storedNum;
+            localStorage.removeItem('activeCertificationId');
+        } else {
+            return storedNum;
+        }
+    }
     const activeId = resolveCertObjId(activeCertification);
     if (activeId) return activeId;
     if (currentCertifications && currentCertifications.length > 0) {
@@ -2365,8 +2373,11 @@ async function submitCreateQuestion() {
         options.push({ optionLabel: 'D', optionText: optD, correct: correctLabel === 'D', distractorReason: document.getElementById('new-q-why-d').value.trim() || null });
     }
 
+    const activeCertId = getActiveCertificationId();
     const payload = {
         topicId,
+        areaId: topicId,
+        certificationId: activeCertId,
         difficulty,
         materialId,
         stem,
@@ -5033,7 +5044,9 @@ function openEditQuestionModal(questionId) {
         if (titleEl) titleEl.textContent = `✏️ Editar Pregunta #${q.id}`;
     }
 
-    if (q.topic && document.getElementById('new-q-topic-id')) {
+    if (q.area && document.getElementById('new-q-topic-id')) {
+        document.getElementById('new-q-topic-id').value = q.area.id;
+    } else if (q.topic && document.getElementById('new-q-topic-id')) {
         document.getElementById('new-q-topic-id').value = q.topic.id;
     }
     if (document.getElementById('new-q-difficulty')) {

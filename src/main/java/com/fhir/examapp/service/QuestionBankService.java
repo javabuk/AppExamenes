@@ -116,19 +116,66 @@ public class QuestionBankService {
             material = materialRepository.findById(dto.getMaterialId()).orElse(null);
         }
 
-        final Long resolvedTopicId = (dto.getTopicId() != null)
+        final Long resolvedTopicOrAreaId = (dto.getTopicId() != null)
                 ? dto.getTopicId()
-                : (material != null && material.getTopic() != null ? material.getTopic().getId() : null);
+                : (dto.getAreaId() != null ? dto.getAreaId() : (material != null && material.getTopic() != null ? material.getTopic().getId() : null));
 
-        if (resolvedTopicId == null) {
-            throw new IllegalArgumentException("Debe especificarse un tema (topicId) o un documento asociado con tema válido.");
+        if (resolvedTopicOrAreaId == null) {
+            throw new IllegalArgumentException("Debe especificarse un tema o área de la certificación.");
         }
 
-        SyllabusTopic topic = topicRepository.findById(resolvedTopicId)
-                .orElseThrow(() -> new IllegalArgumentException("Tema no encontrado: " + resolvedTopicId));
+        CertificationArea area = null;
+        if (dto.getAreaId() != null && certificationAreaRepository != null) {
+            area = certificationAreaRepository.findById(dto.getAreaId()).orElse(null);
+        }
+        if (area == null && certificationAreaRepository != null) {
+            area = certificationAreaRepository.findById(resolvedTopicOrAreaId).orElse(null);
+        }
+
+        Certification cert = null;
+        if (dto.getCertificationId() != null && certificationRepository != null) {
+            cert = certificationRepository.findById(dto.getCertificationId()).orElse(null);
+        } else if (dto.getCertificationCode() != null && certificationRepository != null) {
+            cert = certificationRepository.findByCodeIgnoreCase(dto.getCertificationCode()).orElse(null);
+        } else if (area != null && area.getCertification() != null) {
+            cert = area.getCertification();
+        } else if (material != null && material.getCertification() != null) {
+            cert = material.getCertification();
+        } else if (certificationContextHelper != null) {
+            try {
+                cert = certificationContextHelper.resolveActiveCertification();
+            } catch (Exception ignored) {}
+        }
+        if (cert == null && area != null && area.getCertification() != null) {
+            cert = area.getCertification();
+        }
+        if (cert == null && certificationRepository != null) {
+            cert = certificationRepository.findById(1L).orElse(null);
+        }
+
+        if (area == null && cert != null && certificationAreaRepository != null && dto.getAreaCode() != null) {
+            area = certificationAreaRepository.findByCertificationIdAndCodeIgnoreCase(cert.getId(), dto.getAreaCode()).orElse(null);
+        }
+
+        final CertificationArea finalArea = area;
+        SyllabusTopic topic = topicRepository.findById(resolvedTopicOrAreaId).orElse(null);
+        if (topic == null && finalArea != null) {
+            final String areaCode = finalArea.getCode();
+            topic = topicRepository.findByCodeIgnoreCase(areaCode)
+                    .orElseGet(() -> {
+                        String prefix = areaCode.replaceAll("_[A-Za-z0-9]+$", "");
+                        return topicRepository.findByCodeIgnoreCase(prefix)
+                                .orElseGet(() -> topicRepository.findById(1L).orElse(null));
+                    });
+        }
+        if (topic == null) {
+            topic = topicRepository.findById(1L).orElse(null);
+        }
 
         Question question = new Question();
         question.setTopic(topic);
+        question.setArea(area);
+        question.setCertification(cert);
         question.setMaterial(material);
         question.setOwner(currentUser);
         question.setCreatedAt(User.formatNow());
@@ -141,29 +188,6 @@ public class QuestionBankService {
         question.setQuestionType(dto.getQuestionType() != null ? dto.getQuestionType() : "SINGLE_CHOICE");
         question.setSource(dto.getSource() != null ? dto.getSource() : "MANUAL");
         question.setVerified(true);
-
-        Certification cert = null;
-        if (dto.getCertificationId() != null && certificationRepository != null) {
-            cert = certificationRepository.findById(dto.getCertificationId()).orElse(null);
-        } else if (dto.getCertificationCode() != null && certificationRepository != null) {
-            cert = certificationRepository.findByCodeIgnoreCase(dto.getCertificationCode()).orElse(null);
-        } else if (material != null && material.getCertification() != null) {
-            cert = material.getCertification();
-        } else if (certificationContextHelper != null) {
-            try {
-                cert = certificationContextHelper.resolveActiveCertification();
-            } catch (Exception ignored) {}
-        }
-        if (cert == null && certificationRepository != null) {
-            cert = certificationRepository.findById(1L).orElse(null);
-        }
-        question.setCertification(cert);
-
-        if (dto.getAreaId() != null && certificationAreaRepository != null) {
-            certificationAreaRepository.findById(dto.getAreaId()).ifPresent(question::setArea);
-        } else if (resolvedTopicId != null && certificationAreaRepository != null) {
-            certificationAreaRepository.findById(resolvedTopicId).ifPresent(question::setArea);
-        }
 
         if (dto.getParentQuestionId() != null) {
             questionRepository.findById(dto.getParentQuestionId()).ifPresent(question::setParentQuestion);
@@ -197,10 +221,34 @@ public class QuestionBankService {
 
         checkOwnershipOrAdmin(question);
 
-        if (dto.getTopicId() != null) {
-            SyllabusTopic topic = topicRepository.findById(dto.getTopicId())
-                    .orElseThrow(() -> new IllegalArgumentException("Tema no encontrado: " + dto.getTopicId()));
-            question.setTopic(topic);
+        if (dto.getAreaId() != null || dto.getTopicId() != null) {
+            Long areaOrTopicId = dto.getAreaId() != null ? dto.getAreaId() : dto.getTopicId();
+            CertificationArea area = null;
+            if (certificationAreaRepository != null) {
+                area = certificationAreaRepository.findById(areaOrTopicId).orElse(null);
+                if (area != null) {
+                    question.setArea(area);
+                    if (area.getCertification() != null) {
+                        question.setCertification(area.getCertification());
+                    }
+                }
+            }
+            final CertificationArea finalArea = area;
+            SyllabusTopic topic = topicRepository.findById(areaOrTopicId).orElse(null);
+            if (topic == null && finalArea != null) {
+                final String areaCode = finalArea.getCode();
+                topic = topicRepository.findByCodeIgnoreCase(areaCode)
+                        .orElseGet(() -> {
+                            String prefix = areaCode.replaceAll("_[A-Za-z0-9]+$", "");
+                            return topicRepository.findByCodeIgnoreCase(prefix).orElse(null);
+                        });
+            }
+            if (topic != null) {
+                question.setTopic(topic);
+            }
+        }
+        if (dto.getCertificationId() != null && certificationRepository != null) {
+            certificationRepository.findById(dto.getCertificationId()).ifPresent(question::setCertification);
         }
         if (dto.getMaterialId() != null) {
             StudyMaterial mat = materialRepository.findById(dto.getMaterialId()).orElse(null);

@@ -223,4 +223,61 @@ public class CertificationIsolationIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
     }
+
+    @Test
+    @DisplayName("Header con ID de user_certifications o ID obsoleto resuelve de forma segura sin 500")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void headerWithStaleIdResolvesGracefully() throws Exception {
+        // Enviar un ID que no existe como certificacion (ej: 99999 o 32)
+        mockMvc.perform(get("/api/certifications/areas")
+                        .header("X-Certification", "99999"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/dashboard")
+                        .header("X-Certification", "99999"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Crear pregunta en certificación R5 con areaId no produce error de tema no encontrado")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void createQuestionInR5WithAreaIdSucceeds() throws Exception {
+        CertificationArea r5Area = areaRepository.findByCertificationIdOrderBySortOrderAsc(r5Cert.getId())
+                .stream().findFirst().orElseGet(() -> {
+                    CertificationArea a = new CertificationArea();
+                    a.setCertification(r5Cert);
+                    a.setCode("FOUNDATIONS_R5");
+                    a.setName("Fundamentos R5");
+                    a.setWeightPercent(20.0);
+                    a.setSortOrder(1);
+                    a.setActive(true);
+                    return areaRepository.save(a);
+                });
+
+        String payload = """
+                {
+                    "topicId": %d,
+                    "areaId": %d,
+                    "certificationId": %d,
+                    "stem": "¿Pregunta de prueba en FHIR R5?",
+                    "explanation": "Explicación FHIR R5",
+                    "difficulty": 2,
+                    "questionType": "SINGLE_CHOICE",
+                    "source": "MANUAL",
+                    "options": [
+                        {"optionLabel": "A", "optionText": "Opción A correcta", "correct": true},
+                        {"optionLabel": "B", "optionText": "Opción B incorrecta", "correct": false}
+                    ]
+                }
+                """.formatted(r5Area.getId(), r5Area.getId(), r5Cert.getId());
+
+        mockMvc.perform(post("/api/questions")
+                        .with(csrf())
+                        .header("X-Certification", String.valueOf(r5Cert.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.area.id").value(r5Area.getId().intValue()));
+    }
 }

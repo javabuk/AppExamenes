@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface SyllabusTopicRepository extends JpaRepository<SyllabusTopic, Long> {
     Optional<SyllabusTopic> findByCode(String code);
+    Optional<SyllabusTopic> findByCodeIgnoreCase(String code);
 }

@@ -48,9 +48,17 @@ public class CertificationContextHelper {
         Certification cert = null;
         if (certId != null) {
             final Long finalId = certId;
-            cert = certificationRepository.findById(finalId)
-                    .orElseThrow(() -> new IllegalArgumentException("Certificación no encontrada: " + finalId));
-        } else {
+            cert = certificationRepository.findById(finalId).orElse(null);
+            if (cert == null && userCertificationRepository != null) {
+                cert = userCertificationRepository.findById(finalId)
+                        .map(UserCertification::getCertification)
+                        .orElse(null);
+            }
+            if (cert == null && explicitCertId != null) {
+                throw new IllegalArgumentException("Certificación no encontrada: " + finalId);
+            }
+        }
+        if (cert == null) {
             String certCode = resolveCertCodeFromRequest();
             if (certCode != null && !certCode.isBlank()) {
                 cert = certificationRepository.findByCodeIgnoreCase(certCode).orElse(null);
@@ -103,10 +111,16 @@ public class CertificationContextHelper {
 
         if (certId != null) {
             final Long finalId = certId;
-            Certification cert = certificationRepository.findById(finalId)
-                    .orElseThrow(() -> new IllegalArgumentException("Certificación no encontrada: " + finalId));
-            validateAccess(cert, currentUser);
-            return cert;
+            Certification cert = certificationRepository.findById(finalId).orElse(null);
+            if (cert == null && userCertificationRepository != null) {
+                cert = userCertificationRepository.findById(finalId)
+                        .map(UserCertification::getCertification)
+                        .orElse(null);
+            }
+            if (cert != null) {
+                validateAccess(cert, currentUser);
+                return cert;
+            }
         }
 
         if (certHeader != null && !certHeader.isBlank()) {
