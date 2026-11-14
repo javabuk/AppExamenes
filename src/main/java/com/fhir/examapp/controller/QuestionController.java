@@ -23,14 +23,15 @@ public class QuestionController {
     @GetMapping
     public ResponseEntity<List<Question>> getQuestions(
             @RequestParam(required = false) Long topicId,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long certificationId) {
         if (topicId != null) {
-            return ResponseEntity.ok(questionBankService.getQuestionsByTopic(topicId));
+            return ResponseEntity.ok(questionBankService.getQuestionsByTopic(topicId, certificationId));
         }
         if (search != null && !search.trim().isEmpty()) {
-            return ResponseEntity.ok(questionBankService.searchQuestions(search));
+            return ResponseEntity.ok(questionBankService.searchQuestions(search, certificationId));
         }
-        return ResponseEntity.ok(questionBankService.getAllQuestions());
+        return ResponseEntity.ok(questionBankService.getAllQuestions(certificationId));
     }
 
     @PostMapping

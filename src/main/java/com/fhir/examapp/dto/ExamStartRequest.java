@@ -5,6 +5,7 @@ public class ExamStartRequest {
     private Integer questionCount;
     private Long topicId; // Opcional, para practicar un tema específico
     private Long materialId; // Opcional, para practicar un apunte o documento concreto
+    private Long certificationId; // Opcional, si no se especifica se toma la activa por contexto
 
     public ExamStartRequest() {}
 
@@ -32,4 +33,7 @@ public class ExamStartRequest {
 
     public Long getMaterialId() { return materialId; }
     public void setMaterialId(Long materialId) { this.materialId = materialId; }
+
+    public Long getCertificationId() { return certificationId; }
+    public void setCertificationId(Long certificationId) { this.certificationId = certificationId; }
 }

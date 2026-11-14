@@ -21,11 +21,20 @@ public interface QuestionSrsStateRepository extends JpaRepository<QuestionSrsSta
     @Query("SELECT s FROM QuestionSrsState s WHERE s.userId = :userId AND s.nextReviewDate <= :today ORDER BY s.nextReviewDate ASC")
     List<QuestionSrsState> findDueSrsStatesByUserId(@Param("userId") Long userId, @Param("today") String today);
 
+    @Query("SELECT s FROM QuestionSrsState s WHERE s.userId = :userId AND s.certification.id = :certId AND s.nextReviewDate <= :today ORDER BY s.nextReviewDate ASC")
+    List<QuestionSrsState> findDueSrsStatesByUserIdAndCertificationId(@Param("userId") Long userId, @Param("certId") Long certId, @Param("today") String today);
+
     @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.nextReviewDate <= :today")
     long countDueReviewsByUserId(@Param("userId") Long userId, @Param("today") String today);
 
+    @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.certification.id = :certId AND s.nextReviewDate <= :today")
+    long countDueReviewsByUserIdAndCertificationId(@Param("userId") Long userId, @Param("certId") Long certId, @Param("today") String today);
+
     @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.consecutiveCorrect >= 2")
     long countMasteredQuestionsByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(s) FROM QuestionSrsState s WHERE s.userId = :userId AND s.certification.id = :certId AND s.consecutiveCorrect >= 2")
+    long countMasteredQuestionsByUserIdAndCertificationId(@Param("userId") Long userId, @Param("certId") Long certId);
 
     @Query("SELECT s FROM QuestionSrsState s WHERE s.nextReviewDate <= :today ORDER BY s.nextReviewDate ASC")
     List<QuestionSrsState> findDueSrsStates(@Param("today") String today);

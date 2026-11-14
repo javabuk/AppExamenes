@@ -21,10 +21,19 @@ public class Question {
     private SyllabusTopic topic;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "area_id")
+    private CertificationArea area;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "certification_id")
+    private Certification certification;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_question_id")
     @JsonIgnore
     private Question parentQuestion;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "material_id")
     private StudyMaterial material;
@@ -134,6 +143,11 @@ public class Question {
     public StudyMaterial getMaterial() { return material; }
     public void setMaterial(StudyMaterial material) { this.material = material; }
 
+    @JsonProperty("materialId")
+    public Long resolveMaterialId() {
+        return material != null ? material.getId() : null;
+    }
+
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 
@@ -145,6 +159,12 @@ public class Question {
 
     public String getDeletedAt() { return deletedAt; }
     public void setDeletedAt(String deletedAt) { this.deletedAt = deletedAt; }
+
+    public CertificationArea getArea() { return area; }
+    public void setArea(CertificationArea area) { this.area = area; }
+
+    public Certification getCertification() { return certification; }
+    public void setCertification(Certification certification) { this.certification = certification; }
 
     public List<QuestionOption> getOptions() { return options; }
     public void setOptions(List<QuestionOption> options) { this.options = options; }

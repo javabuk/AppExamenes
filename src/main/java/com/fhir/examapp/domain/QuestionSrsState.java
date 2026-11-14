@@ -21,6 +21,10 @@ public class QuestionSrsState {
     @Column(name = "question_id", nullable = false)
     private Long questionId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "certification_id")
+    private Certification certification;
+
     @Column(name = "consecutive_correct")
     private Integer consecutiveCorrect = 0;
 
@@ -99,4 +103,7 @@ public class QuestionSrsState {
 
     public String getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+
+    public Certification getCertification() { return certification; }
+    public void setCertification(Certification certification) { this.certification = certification; }
 }

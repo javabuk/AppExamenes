@@ -1,5 +1,6 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.Certification;
 import com.fhir.examapp.domain.Question;
 import com.fhir.examapp.domain.QuestionOption;
 import com.fhir.examapp.domain.QuestionSrsState;
@@ -8,8 +9,10 @@ import com.fhir.examapp.dto.ExamOptionDTO;
 import com.fhir.examapp.dto.FlashcardDTO;
 import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.QuestionSrsStateRepository;
+import com.fhir.examapp.security.CertificationContextHelper;
 import com.fhir.examapp.security.SecurityContextHelper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,7 @@ public class SpacedRepetitionService {
     private final QuestionSrsStateRepository srsStateRepository;
     private final QuestionRepository questionRepository;
     private final SecurityContextHelper securityContextHelper;
+    private CertificationContextHelper certificationContextHelper;
 
     public SpacedRepetitionService(QuestionSrsStateRepository srsStateRepository, QuestionRepository questionRepository) {
         this(srsStateRepository, questionRepository, null);
@@ -39,8 +43,25 @@ public class SpacedRepetitionService {
         this.securityContextHelper = securityContextHelper;
     }
 
+    @Autowired
+    public void setCertificationContextHelper(@Autowired(required = false) CertificationContextHelper certificationContextHelper) {
+        this.certificationContextHelper = certificationContextHelper;
+    }
+
     private Long resolveCurrentUserId() {
         return securityContextHelper != null ? securityContextHelper.getCurrentUserId() : 1L;
+    }
+
+    private Long resolveActiveCertificationId() {
+        if (certificationContextHelper != null) {
+            try {
+                Certification cert = certificationContextHelper.resolveActiveCertification();
+                if (cert != null) return cert.getId();
+            } catch (AccessDeniedException e) {
+                throw e;
+            } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     /**
@@ -92,8 +113,15 @@ public class SpacedRepetitionService {
         QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
                     QuestionSrsState newState = new QuestionSrsState(resolvedUserId, question.getId());
+                    if (question.getCertification() != null) {
+                        newState.setCertification(question.getCertification());
+                    }
                     return srsStateRepository.save(newState);
                 });
+
+        if (state.getCertification() == null && question.getCertification() != null) {
+            state.setCertification(question.getCertification());
+        }
 
         int rating = correct ? 4 : 1;
         applySm2(state, rating);
@@ -117,8 +145,15 @@ public class SpacedRepetitionService {
         QuestionSrsState state = srsStateRepository.findByUserIdAndQuestionId(resolvedUserId, question.getId())
                 .orElseGet(() -> {
                     QuestionSrsState newState = new QuestionSrsState(resolvedUserId, questionId);
+                    if (question.getCertification() != null) {
+                        newState.setCertification(question.getCertification());
+                    }
                     return srsStateRepository.save(newState);
                 });
+
+        if (state.getCertification() == null && question.getCertification() != null) {
+            state.setCertification(question.getCertification());
+        }
 
         return applySm2(state, rating);
     }
@@ -133,9 +168,21 @@ public class SpacedRepetitionService {
 
     @Transactional(readOnly = true)
     public List<FlashcardDTO> getDueFlashcardsForUser(Long userId) {
+        return getDueFlashcardsForUser(userId, resolveActiveCertificationId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<FlashcardDTO> getDueFlashcardsForUser(Long userId, Long certificationId) {
         Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
         LocalDate today = LocalDate.now();
-        List<Question> activeQuestions = questionRepository.findByVerifiedTrue();
+
+        List<Question> activeQuestions;
+        if (certificationId != null) {
+            activeQuestions = questionRepository.findByCertificationIdAndVerifiedTrue(certificationId);
+        } else {
+            activeQuestions = questionRepository.findByVerifiedTrue();
+        }
+
         if (activeQuestions.isEmpty()) {
             return List.of();
         }
@@ -149,6 +196,9 @@ public class SpacedRepetitionService {
             if (state == null) {
                 // Pregunta aún no revisada por este usuario: está pendiente para hoy
                 QuestionSrsState defaultState = new QuestionSrsState(resolvedUserId, q.getId());
+                if (q.getCertification() != null) {
+                    defaultState.setCertification(q.getCertification());
+                }
                 FlashcardDTO dto = toFlashcardDTO(defaultState, q);
                 if (dto != null) list.add(dto);
             } else {
@@ -171,9 +221,21 @@ public class SpacedRepetitionService {
 
     @Transactional(readOnly = true)
     public long getDueCountForUser(Long userId) {
+        return getDueCountForUser(userId, resolveActiveCertificationId());
+    }
+
+    @Transactional(readOnly = true)
+    public long getDueCountForUser(Long userId, Long certificationId) {
         Long resolvedUserId = userId != null ? userId : resolveCurrentUserId();
         LocalDate today = LocalDate.now();
-        List<Question> activeQuestions = questionRepository.findByVerifiedTrue();
+
+        List<Question> activeQuestions;
+        if (certificationId != null) {
+            activeQuestions = questionRepository.findByCertificationIdAndVerifiedTrue(certificationId);
+        } else {
+            activeQuestions = questionRepository.findByVerifiedTrue();
+        }
+
         if (activeQuestions.isEmpty()) return 0;
 
         Map<Long, QuestionSrsState> stateByQuestionId = srsStateRepository.findByUserId(resolvedUserId).stream()
@@ -198,6 +260,9 @@ public class SpacedRepetitionService {
         if (question != null && question.getId() != null
                 && !srsStateRepository.existsByUserIdAndQuestionId(resolvedUserId, question.getId())) {
             QuestionSrsState state = new QuestionSrsState(resolvedUserId, question.getId());
+            if (question.getCertification() != null) {
+                state.setCertification(question.getCertification());
+            }
             srsStateRepository.save(state);
         }
     }

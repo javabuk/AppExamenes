@@ -35,8 +35,8 @@ public class AdminResultsController {
     }
 
     @GetMapping("/results/users")
-    public ResponseEntity<List<AdminUserKpiDTO>> getUsersKpis() {
-        return ResponseEntity.ok(adminResultsService.getAllUsersKpis());
+    public ResponseEntity<List<AdminUserKpiDTO>> getUsersKpis(@RequestParam(required = false) Long certificationId) {
+        return ResponseEntity.ok(adminResultsService.getAllUsersKpis(certificationId));
     }
 
     @GetMapping("/results/users/{userId}")
@@ -44,9 +44,10 @@ public class AdminResultsController {
             @PathVariable Long userId,
             @RequestParam(required = false) String mode,
             @RequestParam(required = false) String fromDate,
-            @RequestParam(required = false) String toDate) {
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) Long certificationId) {
         try {
-            AdminUserDetailDTO detail = adminResultsService.getUserDetail(userId, mode, fromDate, toDate);
+            AdminUserDetailDTO detail = adminResultsService.getUserDetail(userId, mode, fromDate, toDate, certificationId);
             return ResponseEntity.ok(detail);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
@@ -70,8 +71,9 @@ public class AdminResultsController {
             @RequestParam(required = false) String mode,
             @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String toDate,
-            @RequestParam(required = false) Long userId) {
-        return ResponseEntity.ok(adminResultsService.getAggregateResults(mode, fromDate, toDate, userId));
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Long certificationId) {
+        return ResponseEntity.ok(adminResultsService.getAggregateResults(mode, fromDate, toDate, userId, certificationId));
     }
 
     @GetMapping(value = "/results/export.csv", produces = "text/csv;charset=UTF-8")
@@ -79,8 +81,9 @@ public class AdminResultsController {
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String mode,
             @RequestParam(required = false) String fromDate,
-            @RequestParam(required = false) String toDate) {
-        String csv = adminResultsService.exportResultsCsv(userId, mode, fromDate, toDate);
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) Long certificationId) {
+        String csv = adminResultsService.exportResultsCsv(userId, mode, fromDate, toDate, certificationId);
         byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
 
         String filename = userId != null

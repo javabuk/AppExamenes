@@ -16,7 +16,7 @@ public class DashboardController {
     }
 
     @GetMapping
-    public ResponseEntity<DashboardDTO> getDashboard() {
-        return ResponseEntity.ok(dashboardService.getDashboardData());
+    public ResponseEntity<DashboardDTO> getDashboard(@RequestParam(required = false) Long certificationId) {
+        return ResponseEntity.ok(dashboardService.getDashboardData(certificationId));
     }
 }

@@ -4,10 +4,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fhir.examapp.domain.*;
 import com.fhir.examapp.dto.QuestionCreateDTO;
+import com.fhir.examapp.repository.CertificationAreaRepository;
+import com.fhir.examapp.repository.CertificationRepository;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
+import com.fhir.examapp.security.CertificationContextHelper;
 import com.fhir.examapp.security.SecurityContextHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
@@ -29,6 +32,31 @@ public class QuestionBankService {
     private final ObjectMapper objectMapper;
     private final SecurityContextHelper securityContextHelper;
     private final AuditService auditService;
+    private CertificationContextHelper certificationContextHelper;
+    private CertificationRepository certificationRepository;
+    private CertificationAreaRepository certificationAreaRepository;
+
+    @Autowired
+    public void setCertificationComponents(@Autowired(required = false) CertificationContextHelper certificationContextHelper,
+                                          @Autowired(required = false) CertificationRepository certificationRepository,
+                                          @Autowired(required = false) CertificationAreaRepository certificationAreaRepository) {
+        this.certificationContextHelper = certificationContextHelper;
+        this.certificationRepository = certificationRepository;
+        this.certificationAreaRepository = certificationAreaRepository;
+    }
+
+    private Long resolveCertId(Long explicitCertId) {
+        if (explicitCertId != null) return explicitCertId;
+        if (certificationContextHelper != null) {
+            try {
+                Certification cert = certificationContextHelper.resolveActiveCertification();
+                if (cert != null) return cert.getId();
+            } catch (AccessDeniedException e) {
+                throw e;
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
 
     public QuestionBankService(QuestionRepository questionRepository,
                                QuestionOptionRepository optionRepository,
@@ -113,6 +141,29 @@ public class QuestionBankService {
         question.setQuestionType(dto.getQuestionType() != null ? dto.getQuestionType() : "SINGLE_CHOICE");
         question.setSource(dto.getSource() != null ? dto.getSource() : "MANUAL");
         question.setVerified(true);
+
+        Certification cert = null;
+        if (dto.getCertificationId() != null && certificationRepository != null) {
+            cert = certificationRepository.findById(dto.getCertificationId()).orElse(null);
+        } else if (dto.getCertificationCode() != null && certificationRepository != null) {
+            cert = certificationRepository.findByCodeIgnoreCase(dto.getCertificationCode()).orElse(null);
+        } else if (material != null && material.getCertification() != null) {
+            cert = material.getCertification();
+        } else if (certificationContextHelper != null) {
+            try {
+                cert = certificationContextHelper.resolveActiveCertification();
+            } catch (Exception ignored) {}
+        }
+        if (cert == null && certificationRepository != null) {
+            cert = certificationRepository.findById(1L).orElse(null);
+        }
+        question.setCertification(cert);
+
+        if (dto.getAreaId() != null && certificationAreaRepository != null) {
+            certificationAreaRepository.findById(dto.getAreaId()).ifPresent(question::setArea);
+        } else if (resolvedTopicId != null && certificationAreaRepository != null) {
+            certificationAreaRepository.findById(resolvedTopicId).ifPresent(question::setArea);
+        }
 
         if (dto.getParentQuestionId() != null) {
             questionRepository.findById(dto.getParentQuestionId()).ifPresent(question::setParentQuestion);
@@ -214,6 +265,8 @@ public class QuestionBankService {
         variant.setQuestionType(base.getQuestionType());
         variant.setDifficulty(base.getDifficulty());
         variant.setVerified(true);
+        variant.setCertification(base.getCertification());
+        variant.setArea(base.getArea());
 
         String topicCode = base.getTopic() != null ? base.getTopic().getCode() : "";
 
@@ -291,18 +344,45 @@ public class QuestionBankService {
 
     @Transactional(readOnly = true)
     public List<Question> getAllQuestions() {
+        return getAllQuestions(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Question> getAllQuestions(Long explicitCertId) {
+        Long certId = resolveCertId(explicitCertId);
+        if (certId != null) {
+            return questionRepository.findAllActiveByCertificationId(certId);
+        }
         return questionRepository.findAllActive();
     }
 
     @Transactional(readOnly = true)
     public List<Question> getQuestionsByTopic(Long topicId) {
+        return getQuestionsByTopic(topicId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Question> getQuestionsByTopic(Long topicId, Long explicitCertId) {
+        Long certId = resolveCertId(explicitCertId);
+        if (certId != null) {
+            return questionRepository.findByCertificationIdAndAreaOrTopicId(certId, topicId);
+        }
         return questionRepository.findByTopicId(topicId);
     }
 
     @Transactional(readOnly = true)
     public List<Question> searchQuestions(String query) {
+        return searchQuestions(query, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Question> searchQuestions(String query, Long explicitCertId) {
+        Long certId = resolveCertId(explicitCertId);
         if (query == null || query.trim().isEmpty()) {
-            return questionRepository.findAllActive();
+            return getAllQuestions(certId);
+        }
+        if (certId != null) {
+            return questionRepository.searchByKeywordAndCertificationId(query.trim(), certId);
         }
         return questionRepository.searchByKeyword(query.trim());
     }

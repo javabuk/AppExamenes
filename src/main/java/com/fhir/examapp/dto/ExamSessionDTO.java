@@ -11,6 +11,9 @@ public class ExamSessionDTO {
     private Integer timeLimitMinutes; // p. ej. 90 min para SIMULATION, null para TUTOR
     private Long materialId; // Si la sesión está enfocada a un apunte específico
     private String materialTitle;
+    private Long certificationId;
+    private String certificationCode;
+    private String certificationName;
     private List<ExamQuestionDTO> questions;
 
     public ExamSessionDTO() {}
@@ -35,6 +38,15 @@ public class ExamSessionDTO {
 
     public String getMaterialTitle() { return materialTitle; }
     public void setMaterialTitle(String materialTitle) { this.materialTitle = materialTitle; }
+
+    public Long getCertificationId() { return certificationId; }
+    public void setCertificationId(Long certificationId) { this.certificationId = certificationId; }
+
+    public String getCertificationCode() { return certificationCode; }
+    public void setCertificationCode(String certificationCode) { this.certificationCode = certificationCode; }
+
+    public String getCertificationName() { return certificationName; }
+    public void setCertificationName(String certificationName) { this.certificationName = certificationName; }
 
     public List<ExamQuestionDTO> getQuestions() { return questions; }
     public void setQuestions(List<ExamQuestionDTO> questions) { this.questions = questions; }

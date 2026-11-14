@@ -10,6 +10,10 @@ public class DashboardDTO {
     private Long pendingErrorsCount;
     private Long dueReviewsCount;
     private Double averageTimePerQuestionSeconds;
+    private Long certificationId;
+    private String certificationCode;
+    private String certificationName;
+    private Double passingScorePercent;
     private List<TopicHeatmapDTO> topicHeatmaps;
     private List<RecentAttemptDTO> recentAttempts;
 
@@ -35,6 +39,18 @@ public class DashboardDTO {
 
     public Double getAverageTimePerQuestionSeconds() { return averageTimePerQuestionSeconds; }
     public void setAverageTimePerQuestionSeconds(Double averageTimePerQuestionSeconds) { this.averageTimePerQuestionSeconds = averageTimePerQuestionSeconds; }
+
+    public Long getCertificationId() { return certificationId; }
+    public void setCertificationId(Long certificationId) { this.certificationId = certificationId; }
+
+    public String getCertificationCode() { return certificationCode; }
+    public void setCertificationCode(String certificationCode) { this.certificationCode = certificationCode; }
+
+    public String getCertificationName() { return certificationName; }
+    public void setCertificationName(String certificationName) { this.certificationName = certificationName; }
+
+    public Double getPassingScorePercent() { return passingScorePercent; }
+    public void setPassingScorePercent(Double passingScorePercent) { this.passingScorePercent = passingScorePercent; }
 
     public List<TopicHeatmapDTO> getTopicHeatmaps() { return topicHeatmaps; }
     public void setTopicHeatmaps(List<TopicHeatmapDTO> topicHeatmaps) { this.topicHeatmaps = topicHeatmaps; }

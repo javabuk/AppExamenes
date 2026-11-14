@@ -5,6 +5,10 @@ import java.util.List;
 public class QuestionCreateDTO {
     private Long topicId;
     private Long materialId; // Opcional, para asociar la pregunta a un apunte concreto
+    private Long certificationId;
+    private Long areaId;
+    private String certificationCode;
+    private String areaCode;
     private String stem;
     private String codeSnippet;
     private String explanation;
@@ -22,6 +26,18 @@ public class QuestionCreateDTO {
 
     public Long getMaterialId() { return materialId; }
     public void setMaterialId(Long materialId) { this.materialId = materialId; }
+
+    public Long getCertificationId() { return certificationId; }
+    public void setCertificationId(Long certificationId) { this.certificationId = certificationId; }
+
+    public Long getAreaId() { return areaId; }
+    public void setAreaId(Long areaId) { this.areaId = areaId; }
+
+    public String getCertificationCode() { return certificationCode; }
+    public void setCertificationCode(String certificationCode) { this.certificationCode = certificationCode; }
+
+    public String getAreaCode() { return areaCode; }
+    public void setAreaCode(String areaCode) { this.areaCode = areaCode; }
 
     public String getStem() { return stem; }
     public void setStem(String stem) { this.stem = stem; }

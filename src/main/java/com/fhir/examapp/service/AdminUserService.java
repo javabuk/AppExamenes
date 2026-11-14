@@ -1,13 +1,19 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.Certification;
 import com.fhir.examapp.domain.Role;
 import com.fhir.examapp.domain.User;
+import com.fhir.examapp.domain.UserCertification;
+import com.fhir.examapp.dto.UserCertificationSummaryDTO;
 import com.fhir.examapp.dto.admin.AdminUserCreateRequest;
 import com.fhir.examapp.dto.admin.AdminUserDTO;
 import com.fhir.examapp.dto.admin.AdminUserMutationResponse;
 import com.fhir.examapp.dto.admin.AdminUserUpdateRequest;
+import com.fhir.examapp.repository.CertificationRepository;
+import com.fhir.examapp.repository.UserCertificationRepository;
 import com.fhir.examapp.repository.UserRepository;
 import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -17,10 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,15 +38,39 @@ public class AdminUserService {
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
+    private final UserCertificationRepository userCertificationRepository;
+    private final CertificationRepository certificationRepository;
 
     public AdminUserService(UserRepository userRepository,
                             PasswordEncoder passwordEncoder,
                             AuditService auditService,
                             SecurityContextHelper securityContextHelper) {
+        this(userRepository, passwordEncoder, auditService, securityContextHelper, null, null);
+    }
+
+    @Autowired
+    public AdminUserService(UserRepository userRepository,
+                            PasswordEncoder passwordEncoder,
+                            AuditService auditService,
+                            SecurityContextHelper securityContextHelper,
+                            @Autowired(required = false) UserCertificationRepository userCertificationRepository,
+                            @Autowired(required = false) CertificationRepository certificationRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
         this.securityContextHelper = securityContextHelper;
+        this.userCertificationRepository = userCertificationRepository;
+        this.certificationRepository = certificationRepository;
+    }
+
+    private AdminUserDTO toAdminUserDTO(User u) {
+        AdminUserDTO dto = AdminUserDTO.fromEntity(u);
+        if (dto != null && userCertificationRepository != null) {
+            List<UserCertification> certs = userCertificationRepository.findByUserIdAndActiveTrue(u.getId());
+            dto.setAssignedCertificationIds(certs.stream().map(c -> c.getCertification().getId()).collect(Collectors.toList()));
+            dto.setAssignedCertificationCodes(certs.stream().map(c -> c.getCertification().getCode()).collect(Collectors.toList()));
+        }
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -65,7 +92,7 @@ public class AdminUserService {
         );
 
         List<AdminUserDTO> dtos = userPage.getContent().stream()
-                .map(AdminUserDTO::fromEntity)
+                .map(this::toAdminUserDTO)
                 .collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -125,12 +152,22 @@ public class AdminUserService {
 
         User saved = userRepository.save(newUser);
 
+        if (req.getCertificationIds() != null && !req.getCertificationIds().isEmpty()) {
+            assignCertificationsToUserInternal(saved, req.getCertificationIds(), null);
+        } else if (certificationRepository != null) {
+            Certification defaultCert = certificationRepository.findById(1L)
+                    .orElseGet(() -> certificationRepository.findAll().stream().filter(Certification::isActive).findFirst().orElse(null));
+            if (defaultCert != null) {
+                assignCertificationsToUserInternal(saved, List.of(defaultCert.getId()), null);
+            }
+        }
+
         User currentAdmin = securityContextHelper.getCurrentUser();
         auditService.logUserAction(currentAdmin, "USER_CREATED", "USER", String.valueOf(saved.getId()),
                 "Usuario creado: " + saved.getUsername() + " (rol=" + saved.getRole() + ")", ipAddress);
 
         return new AdminUserMutationResponse(
-                AdminUserDTO.fromEntity(saved),
+                toAdminUserDTO(saved),
                 rawPassword,
                 "Usuario creado correctamente. Debe cambiar su contraseña en el primer inicio de sesión."
         );
@@ -177,11 +214,15 @@ public class AdminUserService {
         target.setUpdatedAt(User.formatNow());
         User saved = userRepository.save(target);
 
+        if (req.getCertificationIds() != null) {
+            assignCertificationsToUserInternal(saved, req.getCertificationIds(), null);
+        }
+
         auditService.logUserAction(currentAdmin, "USER_UPDATED", "USER", String.valueOf(saved.getId()),
                 "Usuario actualizado: " + saved.getUsername() + " (rol=" + saved.getRole() + ", email=" + saved.getEmail() + ")",
                 ipAddress);
 
-        return AdminUserDTO.fromEntity(saved);
+        return toAdminUserDTO(saved);
     }
 
     public AdminUserDTO updateUserStatus(Long targetUserId, boolean active, String ipAddress) {
@@ -212,7 +253,7 @@ public class AdminUserService {
                 "USER", String.valueOf(saved.getId()),
                 "Estado de usuario '" + saved.getUsername() + "' cambiado a active=" + active, ipAddress);
 
-        return AdminUserDTO.fromEntity(saved);
+        return toAdminUserDTO(saved);
     }
 
     public AdminUserMutationResponse resetPassword(Long targetUserId, String customPassword, String ipAddress) {
@@ -238,10 +279,58 @@ public class AdminUserService {
                 "Contraseña reseteada administrativamente para el usuario '" + saved.getUsername() + "'", ipAddress);
 
         return new AdminUserMutationResponse(
-                AdminUserDTO.fromEntity(saved),
+                toAdminUserDTO(saved),
                 tempPassword,
                 "Contraseña reseteada. El usuario deberá cambiarla en su próximo inicio de sesión."
         );
+    }
+
+    public List<UserCertificationSummaryDTO> getUserCertifications(Long targetUserId) {
+        if (userCertificationRepository == null) return List.of();
+        return userCertificationRepository.findByUserId(targetUserId).stream()
+                .map(UserCertificationSummaryDTO::from)
+                .collect(Collectors.toList());
+    }
+
+    public List<UserCertificationSummaryDTO> assignCertificationsToUser(Long targetUserId, List<Long> certificationIds, String targetExamDate, String ipAddress) {
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + targetUserId));
+        assignCertificationsToUserInternal(target, certificationIds, targetExamDate);
+
+        User currentAdmin = securityContextHelper.getCurrentUser();
+        auditService.logUserAction(currentAdmin, "USER_CERTIFICATIONS_UPDATED", "USER", String.valueOf(target.getId()),
+                "Certificaciones asignadas a '" + target.getUsername() + "': " + certificationIds, ipAddress);
+
+        return getUserCertifications(targetUserId);
+    }
+
+    private void assignCertificationsToUserInternal(User user, List<Long> certificationIds, String targetExamDate) {
+        if (userCertificationRepository == null || certificationRepository == null) return;
+        List<UserCertification> existing = userCertificationRepository.findByUserId(user.getId());
+        Set<Long> desired = new HashSet<>(certificationIds != null ? certificationIds : Collections.emptyList());
+
+        for (UserCertification uc : existing) {
+            if (!desired.contains(uc.getCertification().getId())) {
+                userCertificationRepository.delete(uc);
+            } else {
+                if (!uc.isActive()) {
+                    uc.setActive(true);
+                    userCertificationRepository.save(uc);
+                }
+                desired.remove(uc.getCertification().getId());
+            }
+        }
+
+        User currentAdmin = securityContextHelper.getCurrentUser();
+        for (Long certId : desired) {
+            certificationRepository.findById(certId).ifPresent(cert -> {
+                UserCertification uc = new UserCertification(user, cert);
+                uc.setActive(true);
+                uc.setTargetExamDate(targetExamDate);
+                uc.setAssignedBy(currentAdmin != null ? currentAdmin.getUsername() : "ADMIN");
+                userCertificationRepository.save(uc);
+            });
+        }
     }
 
     private String generateTemporaryPassword(int length) {
@@ -252,3 +341,4 @@ public class AdminUserService {
         return sb.toString();
     }
 }
+

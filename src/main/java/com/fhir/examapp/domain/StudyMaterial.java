@@ -18,6 +18,14 @@ public class StudyMaterial {
     @JoinColumn(name = "topic_id")
     private SyllabusTopic topic;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "certification_id")
+    private Certification certification;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "area_id")
+    private CertificationArea area;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
@@ -124,4 +132,10 @@ public class StudyMaterial {
 
     public long getCommentsCount() { return commentsCount; }
     public void setCommentsCount(long commentsCount) { this.commentsCount = commentsCount; }
+
+    public Certification getCertification() { return certification; }
+    public void setCertification(Certification certification) { this.certification = certification; }
+
+    public CertificationArea getArea() { return area; }
+    public void setArea(CertificationArea area) { this.area = area; }
 }

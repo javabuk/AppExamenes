@@ -15,6 +15,8 @@ public class AdminUserDTO {
     private String lastLoginAt;
     private String createdAt;
     private String updatedAt;
+    private java.util.List<Long> assignedCertificationIds;
+    private java.util.List<String> assignedCertificationCodes;
 
     public AdminUserDTO() {
     }
@@ -72,4 +74,10 @@ public class AdminUserDTO {
 
     public String getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+
+    public java.util.List<Long> getAssignedCertificationIds() { return assignedCertificationIds; }
+    public void setAssignedCertificationIds(java.util.List<Long> assignedCertificationIds) { this.assignedCertificationIds = assignedCertificationIds; }
+
+    public java.util.List<String> getAssignedCertificationCodes() { return assignedCertificationCodes; }
+    public void setAssignedCertificationCodes(java.util.List<String> assignedCertificationCodes) { this.assignedCertificationCodes = assignedCertificationCodes; }
 }

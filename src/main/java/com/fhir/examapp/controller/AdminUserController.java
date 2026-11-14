@@ -88,4 +88,21 @@ public class AdminUserController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @GetMapping("/{id}/certifications")
+    public ResponseEntity<?> getUserCertifications(@PathVariable Long id) {
+        return ResponseEntity.ok(adminUserService.getUserCertifications(id));
+    }
+
+    @PostMapping("/{id}/certifications")
+    public ResponseEntity<?> assignUserCertifications(@PathVariable Long id,
+                                                      @Valid @RequestBody com.fhir.examapp.dto.admin.UserCertificationAssignmentRequest request,
+                                                      HttpServletRequest httpRequest) {
+        try {
+            return ResponseEntity.ok(adminUserService.assignCertificationsToUser(
+                    id, request.getCertificationIds(), request.getTargetExamDate(), httpRequest.getRemoteAddr()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

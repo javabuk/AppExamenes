@@ -54,25 +54,35 @@ public class AdminResultsService {
     }
 
     public List<AdminUserKpiDTO> getAllUsersKpis() {
+        return getAllUsersKpis(null);
+    }
+
+    public List<AdminUserKpiDTO> getAllUsersKpis(Long certificationId) {
         List<User> users = userRepository.findAll();
         return users.stream()
-                .map(this::buildUserKpi)
+                .map(u -> buildUserKpi(u, certificationId))
                 .collect(Collectors.toList());
     }
 
     public AdminUserDetailDTO getUserDetail(Long userId, String mode, String fromDate, String toDate) {
+        return getUserDetail(userId, mode, fromDate, toDate, null);
+    }
+
+    public AdminUserDetailDTO getUserDetail(Long userId, String mode, String fromDate, String toDate, Long certificationId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + userId));
 
         AdminUserDetailDTO detail = new AdminUserDetailDTO();
         detail.setUser(AdminUserDTO.fromEntity(user));
 
-        DashboardDTO dashboard = dashboardService.getDashboardDataForUser(userId);
+        DashboardDTO dashboard = dashboardService.getDashboardDataForUser(userId, certificationId);
         detail.setDashboard(dashboard);
-        detail.setKpi(buildUserKpiWithDashboard(user, dashboard));
+        detail.setKpi(buildUserKpiWithDashboard(user, dashboard, certificationId));
 
-        List<ExamAttempt> allUserAttempts = attemptRepository.findFinishedByUserIdOrderByFinishedAtDesc(userId);
-        List<ExamAttempt> filteredAttempts = filterAttempts(allUserAttempts, null, mode, fromDate, toDate);
+        List<ExamAttempt> allUserAttempts = (certificationId != null)
+                ? attemptRepository.findFinishedByUserIdAndCertificationIdOrderByFinishedAtDesc(userId, certificationId)
+                : attemptRepository.findFinishedByUserIdOrderByFinishedAtDesc(userId);
+        List<ExamAttempt> filteredAttempts = filterAttempts(allUserAttempts, null, mode, fromDate, toDate, certificationId);
 
         // 1. Historial de intentos (más reciente primero)
         List<Map<String, Object>> attemptItems = new ArrayList<>();
@@ -158,16 +168,22 @@ public class AdminResultsService {
     }
 
     public AdminAggregateResultsDTO getAggregateResults(String mode, String fromDate, String toDate, Long userId) {
+        return getAggregateResults(mode, fromDate, toDate, userId, null);
+    }
+
+    public AdminAggregateResultsDTO getAggregateResults(String mode, String fromDate, String toDate, Long userId, Long certificationId) {
         AdminAggregateResultsDTO dto = new AdminAggregateResultsDTO();
 
         List<User> allUsers = userRepository.findAll();
         dto.setTotalUsers(allUsers.size());
         dto.setActiveUsers(allUsers.stream().filter(u -> Boolean.TRUE.equals(u.getActive())).count());
-        dto.setTotalQuestionsInBank(questionRepository.countActiveVerified());
+        dto.setTotalQuestionsInBank(certificationId != null ? questionRepository.countActiveVerifiedByCertificationId(certificationId) : questionRepository.countActiveVerified());
         dto.setTotalMaterialsCount(studyMaterialRepository.findAllActive().size());
 
-        List<ExamAttempt> allFinished = attemptRepository.findAllFinishedOrderByFinishedAtDesc();
-        List<ExamAttempt> filteredAttempts = filterAttempts(allFinished, userId, mode, fromDate, toDate);
+        List<ExamAttempt> allFinished = (certificationId != null)
+                ? attemptRepository.findAllFinishedByCertificationIdOrderByFinishedAtDesc(certificationId)
+                : attemptRepository.findAllFinishedOrderByFinishedAtDesc();
+        List<ExamAttempt> filteredAttempts = filterAttempts(allFinished, userId, mode, fromDate, toDate, certificationId);
 
         dto.setTotalCompletedExams(filteredAttempts.size());
         int passed = 0;
@@ -175,7 +191,10 @@ public class AdminResultsService {
         for (ExamAttempt a : filteredAttempts) {
             double score = a.getScorePercent() != null ? a.getScorePercent() : 0.0;
             sumScore += score;
-            if (score >= 80.0) {
+            double passingScore = (a.getCertification() != null && a.getCertification().getPassingScorePercent() > 0)
+                    ? a.getCertification().getPassingScorePercent()
+                    : 70.0;
+            if (score >= passingScore) {
                 passed++;
             }
         }
@@ -191,7 +210,7 @@ public class AdminResultsService {
                 .flatMap(a -> a.getAnswers().stream())
                 .collect(Collectors.toList());
 
-        // Media global por cada una de las 6 áreas del syllabus
+        // Media global por cada área
         List<SyllabusTopic> topics = topicRepository.findAll();
         List<TopicHeatmapDTO> topicAverages = new ArrayList<>();
         for (SyllabusTopic t : topics) {
@@ -237,7 +256,7 @@ public class AdminResultsService {
 
         // Ranking / comparativa de usuarios
         List<AdminUserKpiDTO> ranking = allUsers.stream()
-                .map(this::buildUserKpi)
+                .map(u -> buildUserKpi(u, certificationId))
                 .sorted(Comparator.comparingDouble(AdminUserKpiDTO::getReadinessScore).reversed()
                         .thenComparing(Comparator.comparingDouble(AdminUserKpiDTO::getAverageScore).reversed())
                         .thenComparing(Comparator.comparingInt(AdminUserKpiDTO::getTotalExams).reversed()))
@@ -248,13 +267,18 @@ public class AdminResultsService {
     }
 
     public String exportResultsCsv(Long userId, String mode, String fromDate, String toDate) {
-        List<ExamAttempt> allFinished = attemptRepository.findAllFinishedOrderByFinishedAtDesc();
-        List<ExamAttempt> filteredAttempts = filterAttempts(allFinished, userId, mode, fromDate, toDate);
+        return exportResultsCsv(userId, mode, fromDate, toDate, null);
+    }
+
+    public String exportResultsCsv(Long userId, String mode, String fromDate, String toDate, Long certificationId) {
+        List<ExamAttempt> allFinished = (certificationId != null)
+                ? attemptRepository.findAllFinishedByCertificationIdOrderByFinishedAtDesc(certificationId)
+                : attemptRepository.findAllFinishedOrderByFinishedAtDesc();
+        List<ExamAttempt> filteredAttempts = filterAttempts(allFinished, userId, mode, fromDate, toDate, certificationId);
 
         StringBuilder sb = new StringBuilder();
-        // UTF-8 BOM para apertura directa en Excel
         sb.append('\uFEFF');
-        sb.append("AttemptId,UserId,Username,DisplayName,Email,Mode,StartedAt,FinishedAt,DurationSeconds,TotalQuestions,CorrectAnswers,ScorePercent,Passed,Topic,Material\n");
+        sb.append("AttemptId,UserId,Username,DisplayName,Email,Mode,Certification,StartedAt,FinishedAt,DurationSeconds,TotalQuestions,CorrectAnswers,ScorePercent,Passed,Topic,Material\n");
 
         for (ExamAttempt a : filteredAttempts) {
             User u = a.getUser();
@@ -263,10 +287,14 @@ public class AdminResultsService {
                     ? (int) a.getAnswers().stream().filter(ans -> Boolean.TRUE.equals(ans.getCorrect())).count()
                     : 0;
             double score = a.getScorePercent() != null ? Math.round(a.getScorePercent() * 10.0) / 10.0 : 0.0;
-            boolean passed = score >= 80.0;
+            double passingScore = (a.getCertification() != null && a.getCertification().getPassingScorePercent() > 0)
+                    ? a.getCertification().getPassingScorePercent()
+                    : 70.0;
+            boolean passed = score >= passingScore;
             int durationSec = computeAttemptDurationSeconds(a);
             String topicName = resolveAttemptTopicName(a);
             String materialTitle = a.getMaterial() != null ? a.getMaterial().getTitle() : "";
+            String certCode = a.getCertification() != null ? a.getCertification().getCode() : "FHIR_R4";
 
             sb.append(a.getId()).append(',')
               .append(u != null ? u.getId() : "").append(',')
@@ -274,6 +302,7 @@ public class AdminResultsService {
               .append(escapeCsv(u != null ? u.getDisplayName() : "")).append(',')
               .append(escapeCsv(u != null ? u.getEmail() : "")).append(',')
               .append(escapeCsv(a.getMode())).append(',')
+              .append(escapeCsv(certCode)).append(',')
               .append(escapeCsv(a.getStartedAt() != null ? a.getStartedAt().toString() : "")).append(',')
               .append(escapeCsv(a.getFinishedAt() != null ? a.getFinishedAt().toString() : "")).append(',')
               .append(durationSec).append(',')
@@ -289,11 +318,15 @@ public class AdminResultsService {
     }
 
     private AdminUserKpiDTO buildUserKpi(User user) {
-        DashboardDTO dashboard = dashboardService.getDashboardDataForUser(user.getId());
-        return buildUserKpiWithDashboard(user, dashboard);
+        return buildUserKpi(user, null);
     }
 
-    private AdminUserKpiDTO buildUserKpiWithDashboard(User user, DashboardDTO dashboard) {
+    private AdminUserKpiDTO buildUserKpi(User user, Long certificationId) {
+        DashboardDTO dashboard = dashboardService.getDashboardDataForUser(user.getId(), certificationId);
+        return buildUserKpiWithDashboard(user, dashboard, certificationId);
+    }
+
+    private AdminUserKpiDTO buildUserKpiWithDashboard(User user, DashboardDTO dashboard, Long certificationId) {
         AdminUserKpiDTO kpi = new AdminUserKpiDTO();
         kpi.setUserId(user.getId());
         kpi.setUsername(user.getUsername());
@@ -307,7 +340,9 @@ public class AdminResultsService {
         kpi.setMasteredQuestionsCount(dashboard.getMasteredQuestionsCount());
         kpi.setDueReviewsCount(dashboard.getDueReviewsCount());
 
-        List<ExamAttempt> attempts = attemptRepository.findFinishedByUserIdOrderByFinishedAtDesc(user.getId());
+        List<ExamAttempt> attempts = (certificationId != null)
+                ? attemptRepository.findFinishedByUserIdAndCertificationIdOrderByFinishedAtDesc(user.getId(), certificationId)
+                : attemptRepository.findFinishedByUserIdOrderByFinishedAtDesc(user.getId());
         kpi.setTotalExams(attempts.size());
         if (!attempts.isEmpty()) {
             int passed = 0;
@@ -315,7 +350,10 @@ public class AdminResultsService {
             for (ExamAttempt a : attempts) {
                 double s = a.getScorePercent() != null ? a.getScorePercent() : 0.0;
                 sum += s;
-                if (s >= 80.0) passed++;
+                double passingScore = (a.getCertification() != null && a.getCertification().getPassingScorePercent() > 0)
+                        ? a.getCertification().getPassingScorePercent()
+                        : 70.0;
+                if (s >= passingScore) passed++;
             }
             kpi.setPassedExams(passed);
             kpi.setPassRatePercent(Math.round(((double) passed / attempts.size()) * 1000.0) / 10.0);
@@ -330,6 +368,10 @@ public class AdminResultsService {
     }
 
     private List<ExamAttempt> filterAttempts(List<ExamAttempt> source, Long userId, String mode, String fromDate, String toDate) {
+        return filterAttempts(source, userId, mode, fromDate, toDate, null);
+    }
+
+    private List<ExamAttempt> filterAttempts(List<ExamAttempt> source, Long userId, String mode, String fromDate, String toDate, Long certificationId) {
         LocalDate from = parseLocalDate(fromDate);
         LocalDate to = parseLocalDate(toDate);
         String normalizedMode = (mode != null && !mode.isBlank()) ? mode.trim().toUpperCase() : null;
@@ -338,6 +380,9 @@ public class AdminResultsService {
                 .filter(a -> {
                     if (userId != null) {
                         if (a.getUser() == null || !userId.equals(a.getUser().getId())) return false;
+                    }
+                    if (certificationId != null) {
+                        if (a.getCertification() == null || !certificationId.equals(a.getCertification().getId())) return false;
                     }
                     if (normalizedMode != null && !normalizedMode.equalsIgnoreCase(a.getMode())) {
                         return false;

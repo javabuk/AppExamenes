@@ -3,6 +3,7 @@ package com.fhir.examapp.service;
 import com.fhir.examapp.domain.*;
 import com.fhir.examapp.dto.*;
 import com.fhir.examapp.repository.*;
+import com.fhir.examapp.security.CertificationContextHelper;
 import com.fhir.examapp.security.SecurityContextHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
@@ -25,6 +26,18 @@ public class ExamEngineService {
     private final SpacedRepetitionService srsService;
     private final StudyMaterialRepository studyMaterialRepository;
     private final SecurityContextHelper securityContextHelper;
+    private CertificationContextHelper certificationContextHelper;
+    private CertificationRepository certificationRepository;
+    private CertificationAreaRepository certificationAreaRepository;
+
+    @Autowired
+    public void setCertificationComponents(@Autowired(required = false) CertificationContextHelper certificationContextHelper,
+                                          @Autowired(required = false) CertificationRepository certificationRepository,
+                                          @Autowired(required = false) CertificationAreaRepository certificationAreaRepository) {
+        this.certificationContextHelper = certificationContextHelper;
+        this.certificationRepository = certificationRepository;
+        this.certificationAreaRepository = certificationAreaRepository;
+    }
 
     public ExamEngineService(ExamAttemptRepository attemptRepository,
                              ExamAttemptAnswerRepository attemptAnswerRepository,
@@ -66,49 +79,95 @@ public class ExamEngineService {
         return securityContextHelper != null && securityContextHelper.isCurrentUserAdmin();
     }
 
+    private Certification resolveActiveCertification(Long explicitCertId) {
+        if (certificationContextHelper != null) {
+            try {
+                return certificationContextHelper.resolveActiveCertification(explicitCertId);
+            } catch (AccessDeniedException e) {
+                throw e;
+            } catch (Exception e) {
+                // If resolving active cert fails (e.g. tests without full setup), fallback gracefully
+                if (certificationRepository != null) {
+                    if (explicitCertId != null) {
+                        return certificationRepository.findById(explicitCertId).orElse(null);
+                    }
+                    return certificationRepository.findById(1L).orElse(null);
+                }
+            }
+        }
+        if (certificationRepository != null) {
+            if (explicitCertId != null) {
+                return certificationRepository.findById(explicitCertId).orElse(null);
+            }
+            return certificationRepository.findById(1L).orElse(null);
+        }
+        return null;
+    }
+
     /**
      * Inicia una sesión de examen en cualquiera de los 4 modos oficiales para el usuario autenticado.
      */
     public ExamSessionDTO startExam(ExamStartRequest request) {
         User currentUser = resolveCurrentUser();
         Long userId = currentUser.getId();
+        Certification cert = resolveActiveCertification(request != null ? request.getCertificationId() : null);
 
-        String mode = request.getMode() != null ? request.getMode().toUpperCase() : "SIMULATION";
-        int totalQuestionsNeeded = request.getQuestionCount() != null && request.getQuestionCount() > 0
-                ? request.getQuestionCount() : 10;
+        String mode = request != null && request.getMode() != null ? request.getMode().toUpperCase() : "SIMULATION";
+        int totalQuestionsNeeded;
+        if (request != null && request.getQuestionCount() != null && request.getQuestionCount() > 0) {
+            totalQuestionsNeeded = request.getQuestionCount();
+        } else if ("SIMULATION".equalsIgnoreCase(mode) && cert != null && cert.getExamQuestionCount() > 0) {
+            totalQuestionsNeeded = cert.getExamQuestionCount();
+        } else {
+            totalQuestionsNeeded = 10;
+        }
 
         List<Question> selectedQuestions;
         String materialTitle = null;
         StudyMaterial targetMaterial = null;
 
-        if (request.getMaterialId() != null) {
-            StudyMaterial mat = studyMaterialRepository.findById(request.getMaterialId()).orElse(null);
+        Long requestedTopicId = request != null ? request.getTopicId() : null;
+        Long requestedMaterialId = request != null ? request.getMaterialId() : null;
+
+        if (requestedMaterialId != null) {
+            StudyMaterial mat = studyMaterialRepository.findById(requestedMaterialId).orElse(null);
             if (mat != null && !Boolean.TRUE.equals(mat.getDeleted())) {
                 targetMaterial = mat;
                 materialTitle = mat.getTitle();
                 selectedQuestions = selectQuestionsForMaterial(mat, mode, totalQuestionsNeeded);
             } else {
-                selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId(), userId);
+                selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, requestedTopicId, userId, cert);
             }
         } else {
-            selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, request.getTopicId(), userId);
+            selectedQuestions = selectQuestionsForMode(mode, totalQuestionsNeeded, requestedTopicId, userId, cert);
         }
 
         if (selectedQuestions.isEmpty()) {
-            selectedQuestions = questionRepository.findByVerifiedTrue();
+            if (cert != null) {
+                selectedQuestions = questionRepository.findByCertificationIdAndVerifiedTrue(cert.getId());
+            } else {
+                selectedQuestions = questionRepository.findByVerifiedTrue();
+            }
             if (selectedQuestions.size() > totalQuestionsNeeded) {
                 Collections.shuffle(selectedQuestions);
                 selectedQuestions = selectedQuestions.subList(0, totalQuestionsNeeded);
             }
         }
 
+        if (selectedQuestions.isEmpty()) {
+            throw new IllegalStateException("No hay preguntas disponibles para la certificación o filtro seleccionado.");
+        }
+
         selectedQuestions = new ArrayList<>(selectedQuestions);
         Collections.shuffle(selectedQuestions);
 
-        // Crear intento en BBDD asociado al usuario autenticado
+        // Crear intento en BBDD asociado al usuario autenticado y certificación
         ExamAttempt attempt = new ExamAttempt(mode, currentUser);
         if (targetMaterial != null) {
             attempt.setMaterial(targetMaterial);
+        }
+        if (cert != null) {
+            attempt.setCertification(cert);
         }
         attempt = attemptRepository.save(attempt);
 
@@ -117,11 +176,20 @@ public class ExamEngineService {
         session.setMode(mode);
         session.setStartedAt(attempt.getStartedAt());
         session.setTotalQuestions(selectedQuestions.size());
-        session.setMaterialId(request.getMaterialId());
+        session.setMaterialId(requestedMaterialId);
         session.setMaterialTitle(materialTitle);
+        if (cert != null) {
+            session.setCertificationId(cert.getId());
+            session.setCertificationCode(cert.getCode());
+            session.setCertificationName(cert.getName());
+        }
 
         if ("SIMULATION".equalsIgnoreCase(mode)) {
-            session.setTimeLimitMinutes(Math.max(5, (int) Math.round(selectedQuestions.size() * 1.8)));
+            if (cert != null && cert.getExamDurationMinutes() > 0) {
+                session.setTimeLimitMinutes(cert.getExamDurationMinutes());
+            } else {
+                session.setTimeLimitMinutes(Math.max(5, (int) Math.round(selectedQuestions.size() * 1.8)));
+            }
         }
 
         boolean isTutor = "TUTOR".equalsIgnoreCase(mode);
@@ -237,6 +305,10 @@ public class ExamEngineService {
         attempt.setScorePercent(Math.round(scorePercent * 10.0) / 10.0);
         attemptRepository.save(attempt);
 
+        double passingCutoff = (attempt.getCertification() != null && attempt.getCertification().getPassingScorePercent() > 0)
+                ? attempt.getCertification().getPassingScorePercent()
+                : 70.0;
+
         ExamResultDTO result = new ExamResultDTO();
         result.setAttemptId(attempt.getId());
         result.setMode(attempt.getMode());
@@ -246,7 +318,12 @@ public class ExamEngineService {
         result.setCorrectCount(correctCount);
         result.setTotalCount(totalCount);
         result.setTotalTimeSeconds(totalSeconds);
-        result.setPassed(scorePercent >= 80.0);
+        result.setPassed(scorePercent >= passingCutoff);
+        result.setPassingScorePercent(passingCutoff);
+        if (attempt.getCertification() != null) {
+            result.setCertificationId(attempt.getCertification().getId());
+            result.setCertificationCode(attempt.getCertification().getCode());
+        }
         result.setReviews(reviews);
 
         return result;
@@ -313,6 +390,9 @@ public class ExamEngineService {
         }
 
         double scorePercent = attempt.getScorePercent() != null ? attempt.getScorePercent() : 0.0;
+        double passingCutoff = (attempt.getCertification() != null && attempt.getCertification().getPassingScorePercent() > 0)
+                ? attempt.getCertification().getPassingScorePercent()
+                : 70.0;
 
         ExamResultDTO result = new ExamResultDTO();
         result.setAttemptId(attempt.getId());
@@ -323,7 +403,12 @@ public class ExamEngineService {
         result.setCorrectCount(correctCount);
         result.setTotalCount(totalCount);
         result.setTotalTimeSeconds(totalSeconds);
-        result.setPassed(scorePercent >= 80.0);
+        result.setPassed(scorePercent >= passingCutoff);
+        result.setPassingScorePercent(passingCutoff);
+        if (attempt.getCertification() != null) {
+            result.setCertificationId(attempt.getCertification().getId());
+            result.setCertificationCode(attempt.getCertification().getCode());
+        }
         result.setReviews(reviews);
         return result;
     }
@@ -364,9 +449,16 @@ public class ExamEngineService {
         }
 
         Set<Long> pickedIds = linked.stream().map(Question::getId).collect(Collectors.toSet());
+        Long certId = material.getCertification() != null ? material.getCertification().getId() : null;
 
-        if (result.size() < count && material.getTopic() != null) {
-            List<Question> topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId());
+        if (result.size() < count && (material.getArea() != null || material.getTopic() != null)) {
+            List<Question> topicQuestions;
+            if (certId != null) {
+                Long areaOrTopicId = material.getArea() != null ? material.getArea().getId() : material.getTopic().getId();
+                topicQuestions = questionRepository.findByCertificationIdAndAreaIdAndVerifiedTrue(certId, areaOrTopicId);
+            } else {
+                topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(material.getTopic().getId());
+            }
 
             Set<String> keywords = extractKeywords((material.getTitle() != null ? material.getTitle() : "") + " " +
                                                    (material.getContentText() != null ? material.getContentText() : ""));
@@ -387,7 +479,9 @@ public class ExamEngineService {
         }
 
         if (result.size() < count) {
-            List<Question> remaining = questionRepository.findByVerifiedTrue();
+            List<Question> remaining = certId != null
+                    ? questionRepository.findByCertificationIdAndVerifiedTrue(certId)
+                    : questionRepository.findByVerifiedTrue();
             Collections.shuffle(remaining);
             for (Question q : remaining) {
                 if (result.size() >= count) break;
@@ -430,58 +524,104 @@ public class ExamEngineService {
     }
 
     private List<Question> selectQuestionsForMode(String mode, int count, Long topicIdFilter, Long userId) {
+        return selectQuestionsForMode(mode, count, topicIdFilter, userId, null);
+    }
+
+    private List<Question> selectQuestionsForMode(String mode, int count, Long topicIdFilter, Long userId, Certification cert) {
         if (topicIdFilter != null) {
-            List<Question> byTopic = questionRepository.findByTopicIdAndVerifiedTrue(topicIdFilter);
+            List<Question> byTopic;
+            if (cert != null) {
+                byTopic = questionRepository.findByCertificationIdAndAreaIdAndVerifiedTrue(cert.getId(), topicIdFilter);
+            } else {
+                byTopic = questionRepository.findByTopicIdAndVerifiedTrue(topicIdFilter);
+            }
             Collections.shuffle(byTopic);
             return byTopic.size() > count ? byTopic.subList(0, count) : byTopic;
         }
 
         switch (mode.toUpperCase()) {
             case "SIMULATION":
-                return selectWeightedSimulationQuestions(count);
+                return selectWeightedSimulationQuestions(count, cert);
 
             case "ADAPTIVE":
-                return selectAdaptiveQuestions(count, userId);
+                return selectAdaptiveQuestions(count, userId, cert);
 
             case "ERRORS":
-                List<Question> errors = questionRepository.findErrorInboxQuestionsByUserId(userId);
-                if (errors.isEmpty()) {
-                    errors = questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
+                List<Question> errors;
+                if (cert != null) {
+                    errors = questionRepository.findErrorInboxQuestionsByUserIdAndCertificationId(userId, cert.getId());
+                    if (errors.isEmpty()) {
+                        errors = questionRepository.findPreviouslyFailedQuestionsByUserIdAndCertificationId(userId, cert.getId());
+                    }
+                } else {
+                    errors = questionRepository.findErrorInboxQuestionsByUserId(userId);
+                    if (errors.isEmpty()) {
+                        errors = questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
+                    }
                 }
                 Collections.shuffle(errors);
                 return errors.size() > count ? errors.subList(0, count) : errors;
 
             case "TUTOR":
             default:
-                List<Question> all = questionRepository.findByVerifiedTrue();
+                List<Question> all = (cert != null)
+                        ? questionRepository.findByCertificationIdAndVerifiedTrue(cert.getId())
+                        : questionRepository.findByVerifiedTrue();
                 Collections.shuffle(all);
                 return all.size() > count ? all.subList(0, count) : all;
         }
     }
 
     private List<Question> selectWeightedSimulationQuestions(int totalCount) {
-        List<SyllabusTopic> topics = topicRepository.findAll();
+        return selectWeightedSimulationQuestions(totalCount, null);
+    }
+
+    private List<Question> selectWeightedSimulationQuestions(int totalCount, Certification cert) {
         List<Question> result = new ArrayList<>();
         Set<Long> pickedIds = new HashSet<>();
 
-        for (SyllabusTopic topic : topics) {
-            double weight = topic.getExamWeightPercent() != null ? topic.getExamWeightPercent() : 15.0;
-            int countForTopic = (int) Math.max(1, Math.round((weight / 100.0) * totalCount));
+        if (cert != null && certificationAreaRepository != null) {
+            List<CertificationArea> areas = certificationAreaRepository.findByCertificationIdAndActiveTrueOrderBySortOrderAsc(cert.getId());
+            if (!areas.isEmpty()) {
+                for (CertificationArea area : areas) {
+                    double weight = area.getWeightPercent() > 0 ? area.getWeightPercent() : (100.0 / areas.size());
+                    int countForArea = (int) Math.max(1, Math.round((weight / 100.0) * totalCount));
 
-            List<Question> topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(topic.getId());
-            Collections.shuffle(topicQuestions);
+                    List<Question> areaQuestions = questionRepository.findByCertificationIdAndAreaIdAndVerifiedTrue(cert.getId(), area.getId());
+                    Collections.shuffle(areaQuestions);
 
-            for (Question q : topicQuestions) {
-                if (result.size() < totalCount && !pickedIds.contains(q.getId()) && countForTopic > 0) {
-                    result.add(q);
-                    pickedIds.add(q.getId());
-                    countForTopic--;
+                    for (Question q : areaQuestions) {
+                        if (result.size() < totalCount && !pickedIds.contains(q.getId()) && countForArea > 0) {
+                            result.add(q);
+                            pickedIds.add(q.getId());
+                            countForArea--;
+                        }
+                    }
+                }
+            }
+        } else {
+            List<SyllabusTopic> topics = topicRepository.findAll();
+            for (SyllabusTopic topic : topics) {
+                double weight = topic.getExamWeightPercent() != null ? topic.getExamWeightPercent() : 15.0;
+                int countForTopic = (int) Math.max(1, Math.round((weight / 100.0) * totalCount));
+
+                List<Question> topicQuestions = questionRepository.findByTopicIdAndVerifiedTrue(topic.getId());
+                Collections.shuffle(topicQuestions);
+
+                for (Question q : topicQuestions) {
+                    if (result.size() < totalCount && !pickedIds.contains(q.getId()) && countForTopic > 0) {
+                        result.add(q);
+                        pickedIds.add(q.getId());
+                        countForTopic--;
+                    }
                 }
             }
         }
 
         if (result.size() < totalCount) {
-            List<Question> remaining = questionRepository.findByVerifiedTrue();
+            List<Question> remaining = (cert != null)
+                    ? questionRepository.findByCertificationIdAndVerifiedTrue(cert.getId())
+                    : questionRepository.findByVerifiedTrue();
             Collections.shuffle(remaining);
             for (Question q : remaining) {
                 if (result.size() >= totalCount) break;
@@ -497,6 +637,10 @@ public class ExamEngineService {
     }
 
     private List<Question> selectAdaptiveQuestions(int totalCount, Long userId) {
+        return selectAdaptiveQuestions(totalCount, userId, null);
+    }
+
+    private List<Question> selectAdaptiveQuestions(int totalCount, Long userId, Certification cert) {
         int weakCount = (int) Math.round(totalCount * 0.60);
         int failedCount = (int) Math.round(totalCount * 0.25);
         int newCount = totalCount - weakCount - failedCount;
@@ -504,22 +648,39 @@ public class ExamEngineService {
         List<Question> selected = new ArrayList<>();
         Set<Long> pickedIds = new HashSet<>();
 
-        List<SyllabusTopic> topics = new ArrayList<>(topicRepository.findAll());
-        topics.sort(Comparator.comparingDouble(t -> calculateTopicAccuracy(t, userId)));
-
-        for (SyllabusTopic t : topics) {
-            List<Question> tQuestions = questionRepository.findByTopicIdAndVerifiedTrue(t.getId());
-            Collections.shuffle(tQuestions);
-            for (Question q : tQuestions) {
-                if (selected.size() < weakCount && !pickedIds.contains(q.getId())) {
-                    selected.add(q);
-                    pickedIds.add(q.getId());
+        if (cert != null && certificationAreaRepository != null) {
+            List<CertificationArea> areas = new ArrayList<>(certificationAreaRepository.findByCertificationIdAndActiveTrueOrderBySortOrderAsc(cert.getId()));
+            for (CertificationArea a : areas) {
+                List<Question> aQuestions = questionRepository.findByCertificationIdAndAreaIdAndVerifiedTrue(cert.getId(), a.getId());
+                Collections.shuffle(aQuestions);
+                for (Question q : aQuestions) {
+                    if (selected.size() < weakCount && !pickedIds.contains(q.getId())) {
+                        selected.add(q);
+                        pickedIds.add(q.getId());
+                    }
                 }
+                if (selected.size() >= weakCount) break;
             }
-            if (selected.size() >= weakCount) break;
+        } else {
+            List<SyllabusTopic> topics = new ArrayList<>(topicRepository.findAll());
+            topics.sort(Comparator.comparingDouble(t -> calculateTopicAccuracy(t, userId)));
+
+            for (SyllabusTopic t : topics) {
+                List<Question> tQuestions = questionRepository.findByTopicIdAndVerifiedTrue(t.getId());
+                Collections.shuffle(tQuestions);
+                for (Question q : tQuestions) {
+                    if (selected.size() < weakCount && !pickedIds.contains(q.getId())) {
+                        selected.add(q);
+                        pickedIds.add(q.getId());
+                    }
+                }
+                if (selected.size() >= weakCount) break;
+            }
         }
 
-        List<Question> failedQuestions = questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
+        List<Question> failedQuestions = (cert != null)
+                ? questionRepository.findPreviouslyFailedQuestionsByUserIdAndCertificationId(userId, cert.getId())
+                : questionRepository.findPreviouslyFailedQuestionsByUserId(userId);
         Collections.shuffle(failedQuestions);
         int addedFailed = 0;
         for (Question q : failedQuestions) {
@@ -530,7 +691,9 @@ public class ExamEngineService {
             }
         }
 
-        List<Question> newQuestions = questionRepository.findUnattemptedQuestionsByUserId(userId);
+        List<Question> newQuestions = (cert != null)
+                ? questionRepository.findUnattemptedQuestionsByUserIdAndCertificationId(userId, cert.getId())
+                : questionRepository.findUnattemptedQuestionsByUserId(userId);
         Collections.shuffle(newQuestions);
         int addedNew = 0;
         for (Question q : newQuestions) {
@@ -542,7 +705,9 @@ public class ExamEngineService {
         }
 
         if (selected.size() < totalCount) {
-            List<Question> fallback = questionRepository.findByVerifiedTrue();
+            List<Question> fallback = (cert != null)
+                    ? questionRepository.findByCertificationIdAndVerifiedTrue(cert.getId())
+                    : questionRepository.findByVerifiedTrue();
             Collections.shuffle(fallback);
             for (Question q : fallback) {
                 if (selected.size() >= totalCount) break;
@@ -566,7 +731,16 @@ public class ExamEngineService {
 
     @Transactional(readOnly = true)
     public List<ExamAttempt> getRecentAttempts() {
+        return getRecentAttempts(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExamAttempt> getRecentAttempts(Long explicitCertId) {
         User currentUser = resolveCurrentUser();
+        Certification cert = resolveActiveCertification(explicitCertId);
+        if (cert != null) {
+            return attemptRepository.findTop10ByUser_IdAndCertification_IdAndFinishedAtIsNotNullOrderByFinishedAtDesc(currentUser.getId(), cert.getId());
+        }
         return attemptRepository.findTop10ByUser_IdAndFinishedAtIsNotNullOrderByFinishedAtDesc(currentUser.getId());
     }
 }

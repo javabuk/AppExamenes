@@ -59,7 +59,9 @@ public class User {
     @Column(name = "created_by")
     private String createdBy;
 
-    public User() {}
+    public User() {
+        this.createdAt = LocalDateTime.now().format(FORMATTER);
+    }
 
     public User(String username, String email, String displayName, String passwordHash, Role role) {
         this.username = username;

@@ -15,22 +15,42 @@ import java.util.*;
 @Service
 public class FhirValidationService {
 
-    private final FhirContext fhirContext;
+    private final FhirContext fhirContextR4;
+    private final FhirContext fhirContextR5;
 
     public FhirValidationService() {
-        this.fhirContext = FhirContext.forR4();
+        this.fhirContextR4 = FhirContext.forR4();
+        this.fhirContextR5 = FhirContext.forR5();
     }
 
     public FhirContext getFhirContext() {
-        return fhirContext;
+        return fhirContextR4;
+    }
+
+    public FhirContext getFhirContextForVersion(String version) {
+        if (version != null && (version.equalsIgnoreCase("R5") 
+                || version.equalsIgnoreCase("FHIR_R5") 
+                || version.startsWith("5."))) {
+            return fhirContextR5;
+        }
+        return fhirContextR4;
     }
 
     /**
-     * Valida un recurso JSON FHIR R4 mediante el parser nativo de HAPI FHIR.
+     * Valida un recurso JSON FHIR R4 por defecto.
      */
     public FhirResourceValidationResult validateResource(String resourceJson) {
+        return validateResource(resourceJson, "R4");
+    }
+
+    /**
+     * Valida un recurso JSON FHIR según la versión indicada (R4 o R5).
+     */
+    public FhirResourceValidationResult validateResource(String resourceJson, String version) {
         FhirResourceValidationResult result = new FhirResourceValidationResult();
         List<String> issues = new ArrayList<>();
+        FhirContext ctx = getFhirContextForVersion(version);
+        String verLabel = (ctx == fhirContextR5) ? "FHIR R5" : "FHIR R4";
 
         if (resourceJson == null || resourceJson.trim().isEmpty()) {
             result.setValid(false);
@@ -40,10 +60,10 @@ public class FhirValidationService {
         }
 
         try {
-            IParser parser = fhirContext.newJsonParser().setPrettyPrint(true);
+            IParser parser = ctx.newJsonParser().setPrettyPrint(true);
             IBaseResource resource = parser.parseResource(resourceJson);
 
-            String resourceType = fhirContext.getResourceType(resource);
+            String resourceType = ctx.getResourceType(resource);
             String resourceId = resource.getIdElement() != null ? resource.getIdElement().getIdPart() : null;
 
             result.setResourceType(resourceType);
@@ -51,25 +71,25 @@ public class FhirValidationService {
             result.setFormattedJson(parser.encodeResourceToString(resource));
 
             // Comprobaciones semánticas comunes del examen HL7 FHIR
-            checkCommonFhirRules(resourceType, resourceJson, issues);
+            checkCommonFhirRules(resourceType, resourceJson, issues, verLabel);
 
             result.setValid(issues.isEmpty());
             result.setIssues(issues);
             result.setSummary(issues.isEmpty() 
-                ? "Recurso FHIR R4 '" + resourceType + "' sintácticamente válido según HAPI FHIR."
-                : "Recurso FHIR R4 '" + resourceType + "' analizado con advertencias de conformidad.");
+                ? "Recurso " + verLabel + " '" + resourceType + "' sintácticamente válido según HAPI FHIR."
+                : "Recurso " + verLabel + " '" + resourceType + "' analizado con advertencias de conformidad.");
 
         } catch (Exception e) {
             result.setValid(false);
-            issues.add("Error de análisis sintáctico HAPI FHIR: " + e.getMessage());
+            issues.add("Error de análisis sintáctico HAPI FHIR (" + verLabel + "): " + e.getMessage());
             result.setIssues(issues);
-            result.setSummary("El JSON proporcionado no cumple la especificación HL7 FHIR R4.");
+            result.setSummary("El JSON proporcionado no cumple la especificación HL7 " + verLabel + ".");
         }
 
         return result;
     }
 
-    private void checkCommonFhirRules(String resourceType, String json, List<String> issues) {
+    private void checkCommonFhirRules(String resourceType, String json, List<String> issues, String verLabel) {
         // Reglas de examen FHIR comunes:
         if ("Observation".equalsIgnoreCase(resourceType)) {
             if (!json.contains("\"status\"")) {

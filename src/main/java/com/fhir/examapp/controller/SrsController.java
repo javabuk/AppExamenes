@@ -20,7 +20,10 @@ public class SrsController {
     }
 
     @GetMapping("/due")
-    public ResponseEntity<List<FlashcardDTO>> getDueFlashcards() {
+    public ResponseEntity<List<FlashcardDTO>> getDueFlashcards(@RequestParam(required = false) Long certificationId) {
+        if (certificationId != null) {
+            return ResponseEntity.ok(srsService.getDueFlashcardsForUser(null, certificationId));
+        }
         return ResponseEntity.ok(srsService.getDueFlashcards());
     }
 

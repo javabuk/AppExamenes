@@ -24,14 +24,15 @@ public class StudyMaterialController {
     @GetMapping
     public ResponseEntity<List<StudyMaterial>> getMaterials(
             @RequestParam(required = false) Long topicId,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long certificationId) {
         if (topicId != null) {
             return ResponseEntity.ok(studyMaterialService.getMaterialsByTopic(topicId));
         }
         if (search != null && !search.trim().isEmpty()) {
-            return ResponseEntity.ok(studyMaterialService.searchMaterials(search));
+            return ResponseEntity.ok(studyMaterialService.searchMaterials(search, certificationId));
         }
-        return ResponseEntity.ok(studyMaterialService.getAllMaterials());
+        return ResponseEntity.ok(studyMaterialService.getAllMaterials(certificationId));
     }
 
     @PostMapping("/upload")

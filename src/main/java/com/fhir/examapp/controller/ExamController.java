@@ -22,8 +22,12 @@ public class ExamController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<ExamSessionDTO> startExam(@RequestBody ExamStartRequest request) {
-        return ResponseEntity.ok(examEngineService.startExam(request));
+    public ResponseEntity<?> startExam(@RequestBody ExamStartRequest request) {
+        try {
+            return ResponseEntity.ok(examEngineService.startExam(request));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/submit")
@@ -32,8 +36,8 @@ public class ExamController {
     }
 
     @GetMapping("/recent")
-    public ResponseEntity<List<ExamAttempt>> getRecentAttempts() {
-        return ResponseEntity.ok(examEngineService.getRecentAttempts());
+    public ResponseEntity<List<ExamAttempt>> getRecentAttempts(@RequestParam(required = false) Long certificationId) {
+        return ResponseEntity.ok(examEngineService.getRecentAttempts(certificationId));
     }
 
     @GetMapping("/{id}")

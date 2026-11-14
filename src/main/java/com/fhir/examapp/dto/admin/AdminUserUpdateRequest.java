@@ -13,6 +13,8 @@ public class AdminUserUpdateRequest {
 
     private String role;
 
+    private java.util.List<Long> certificationIds;
+
     public AdminUserUpdateRequest() {
     }
 
@@ -24,4 +26,7 @@ public class AdminUserUpdateRequest {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public java.util.List<Long> getCertificationIds() { return certificationIds; }
+    public void setCertificationIds(java.util.List<Long> certificationIds) { this.certificationIds = certificationIds; }
 }

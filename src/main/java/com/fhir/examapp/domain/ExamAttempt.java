@@ -39,6 +39,10 @@ public class ExamAttempt {
     @JoinColumn(name = "material_id")
     private StudyMaterial material;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "certification_id")
+    private Certification certification;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ExamAttemptAnswer> answers = new ArrayList<>();
 
@@ -107,4 +111,7 @@ public class ExamAttempt {
 
     public StudyMaterial getMaterial() { return material; }
     public void setMaterial(StudyMaterial material) { this.material = material; }
+
+    public Certification getCertification() { return certification; }
+    public void setCertification(Certification certification) { this.certification = certification; }
 }

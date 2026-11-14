@@ -1,21 +1,22 @@
-# 📘 Manual de Usuario Detallado — HL7 FHIR Certification Trainer & Simulator (Edición Multiusuario)
+# 📘 Manual de Usuario Detallado — HL7 FHIR Certification Trainer & Simulator (Plataforma Multi-Certificación y Multiusuario)
 
-Bienvenido al manual oficial de uso y administración de **HL7 FHIR Certification Trainer & Simulator (FHIR Cert Master)**, la plataforma integral multiusuario de estudio, práctica técnica, simulación de exámenes y analítica de progreso para la certificación oficial **HL7 FHIR R4**.
+Bienvenido al manual oficial de uso y administración de **HL7 FHIR Certification Trainer & Simulator (FHIR Cert Master)**, la plataforma integral multiusuario y multi-certificación de estudio, práctica técnica, simulación de exámenes y analítica de progreso para certificaciones oficiales **HL7 FHIR R4, HL7 FHIR R5** y estándares de interoperabilidad adicionales.
 
 ---
 
 ## Índice de Contenidos
 1. [Puesta en Marcha, Autenticación y Roles](#1-puesta-en-marcha-autenticación-y-roles)
-2. [Recorrido por la Interfaz Principal](#2-recorrido-por-la-interfaz-principal)
-3. [Modelo de Propiedad y Aislamiento de Datos por Usuario](#3-modelo-de-propiedad-y-aislamiento-de-datos-por-usuario)
-4. [Cómo Incluir Nuevos Temas en el Syllabus](#4-cómo-incluir-nuevos-temas-en-el-syllabus)
-5. [Cómo Incluir Nuevas Preguntas (4 Métodos)](#5-cómo-incluir-nuevas-preguntas-4-métodos)
-6. [Guía de los 4 Modos de Simulación y Examen](#6-guía-de-los-4-modos-de-simulación-y-examen)
-7. [Herramientas Prácticas FHIR R4 (REST Search & HAPI Inspector)](#7-herramientas-prácticas-fhir-r4-rest-search--hapi-inspector)
-8. [Repetición Espaciada (Flashcards SM-2)](#8-repetición-espaciada-flashcards-sm-2)
-9. [Ingesta de Materiales, Fichas de Estudio y Notas Personales](#9-ingesta-de-materiales-fichas-de-estudio-y-notas-personales)
-10. [Interpretación de Métricas y Semáforo de Preparación](#10-interpretación-de-métricas-y-semáforo-de-preparación)
-11. [Panel de Administración (Solo Rol ADMIN)](#11-panel-de-administración-solo-rol-admin)
+2. [Arquitectura Multi-Certificación y Selector de Estándar](#2-arquitectura-multi-certificación-y-selector-de-estándar)
+3. [Recorrido por la Interfaz Principal](#3-recorrido-por-la-interfaz-principal)
+4. [Modelo de Propiedad y Aislamiento de Datos por Usuario y Certificación](#4-modelo-de-propiedad-y-aislamiento-de-datos-por-usuario-y-certificación)
+5. [Gestión y Configuración del Syllabus Oficial](#5-gestión-y-configuración-del-syllabus-oficial)
+6. [Cómo Incluir Nuevas Preguntas (4 Métodos)](#6-cómo-incluir-nuevas-preguntas-4-métodos)
+7. [Guía de los 4 Modos de Simulación y Examen](#7-guía-de-los-4-modos-de-simulación-y-examen)
+8. [Herramientas Prácticas Versionadas (REST Search & Validador HAPI R4/R5)](#8-herramientas-prácticas-versionadas-rest-search--validador-hapi-r4r5)
+9. [Repetición Espaciada (Flashcards SM-2)](#9-repetición-espaciada-flashcards-sm-2)
+10. [Ingesta de Materiales, Fichas de Estudio y Notas Personales](#10-ingesta-de-materiales-fichas-de-estudio-y-notas-personales)
+11. [Interpretación de Métricas, Ponderación y Semáforo de Preparación](#11-interpretación-de-métricas-ponderación-y-semáforo-de-preparación)
+12. [Panel de Administración (Solo Rol ADMIN)](#12-panel-de-administración-solo-rol-admin)
 
 ---
 
@@ -59,7 +60,27 @@ Una vez iniciado el servidor, abre tu navegador en el puerto configurado en `app
 
 ---
 
-## 2. Recorrido por la Interfaz Principal
+## 2. Arquitectura Multi-Certificación y Selector de Estándar
+
+La plataforma soporta la preparación simultánea de múltiples programas y certificaciones de interoperabilidad sanitaria (por ejemplo, **HL7 FHIR R4**, **HL7 FHIR R5**, **HL7 v2.x**, **CDA**, etc.).
+
+### 2.1. Selector de Certificación en Cabecera
+En la barra superior, junto a la información de tu perfil, se ubica el **Selector de Certificación Activa**:
+- **Múltiples certificaciones asignadas:** Se presenta un desplegable con el icono, código y versión de cada una de las certificaciones que tienes asignadas. Al seleccionar una certificación, la plataforma conmuta inmediatamente todo tu entorno de trabajo (Dashboard, Banco de preguntas, Exámenes, Flashcards y Materiales).
+- **Una única certificación:** Se muestra como una insignia identificativa fija (`🧬 FHIR_R4`).
+- **Persistencia automática:** Tu elección se almacena en el navegador (`localStorage`) y se inyecta de forma transparente en cada llamada a la API a través de la cabecera HTTP `X-Certification`.
+- **Aislamiento de seguridad RBAC:** Un usuario alumno (`USER`) solo puede operar sobre aquellas certificaciones que le hayan sido asignadas activamente por un administrador; si intenta forzar el acceso a otra certificación, el servidor deniega la petición con error `403 Forbidden`. Los administradores (`ADMIN`) pueden conmutar libremente entre cualquier certificación del catálogo.
+
+### 2.2. Parámetros Propios por Certificación
+Cada certificación dispone de sus propios parámetros independientes:
+- **Examen Oficial:** Nº de preguntas (ej. 50 en R4), duración cronometrada en minutos (ej. 90 min) y nota de corte (ej. 70.0%).
+- **Syllabus Ponderado:** Áreas temáticas configurables con pesos porcentuales oficiales (%) que alimentan el cálculo del *Readiness Score* y el mapa de calor.
+- **Documentación Oficial:** URL base de la especificación (ej. `https://hl7.org/fhir/R4/` vs `https://hl7.org/fhir/R5/`) empleada para generar enlaces en las justificaciones de respuesta.
+- **Habilitación de Módulos (Feature Flags):** Cada certificación activa únicamente las herramientas aplicables (`EXAM`, `FLASHCARDS`, `MATERIALS`, `REST_SEARCH_BUILDER`, `RESOURCE_VALIDATOR`). Las herramientas no soportadas por la certificación se ocultan automáticamente en el menú lateral y quedan protegidas ante accesos no autorizados.
+
+---
+
+## 3. Recorrido por la Interfaz Principal
 
 En la **barra superior derecha** encontrarás el **menú de perfil de usuario**, donde se muestra tu nombre, `@username`, insignia de rol (`USER` o `ADMIN`), el botón **`🔑 Cambiar Contraseña`** y el botón **`🚪 Salir`**.
 
@@ -179,34 +200,41 @@ $$\text{Readiness} = 50\% \text{ Precisión Ponderada por Tema} + 30\% \text{ Me
 
 ---
 
-## 11. Panel de Administración (Solo Rol ADMIN)
+## 12. Panel de Administración (Solo Rol ADMIN)
 
-Los usuarios con rol **`ADMIN`** disponen de una sección adicional **Administración** en la barra lateral izquierda con cuatro módulos:
+Los usuarios con rol **`ADMIN`** disponen de una sección adicional **Administración** en la barra lateral izquierda con cinco módulos:
 
-### 11.1. 👥 Gestión de Usuarios (`Administración → Usuarios`)
+### 12.1. 👥 Gestión de Usuarios y Asignación de Certificaciones (`Administración → Usuarios`)
 - **Listado paginado y filtros:** Busca usuarios por nombre, `@username` o email, y filtra por rol (`ADMIN` / `USER`) o estado (`Activo` / `Desactivado`).
-- **Crear Nuevo Usuario:** Define `username`, `email`, nombre visible y rol (`USER` o `ADMIN`). Si dejas en blanco la contraseña inicial, el sistema genera una **contraseña temporal aleatoria**, te la muestra en pantalla para que la entregues al usuario y marca automáticamente `mustChangePassword = true`.
-- **Editar Usuario:** Modifica nombre visible, email o rol.
+- **Crear Nuevo Usuario:** Define `username`, `email`, nombre visible, rol y **certificaciones asignadas** (selección múltiple con casillas de verificación). Si dejas en blanco la contraseña inicial, el sistema genera una **contraseña temporal aleatoria**, te la muestra en pantalla para que la entregues al usuario y marca automáticamente `mustChangePassword = true`.
+- **Editar Usuario y Modificar Certificaciones:** Modifica nombre visible, email, rol y actualiza en tiempo real las certificaciones a las que tiene acceso el alumno.
 - **Activar / Desactivar (Baja Lógica):** Nunca se borran físicamente los usuarios para conservar toda la trazabilidad histórica. Un usuario desactivado no puede iniciar sesión y cualquier sesión activa suya queda invalidada de inmediato.
 - **Resetear Contraseña (`🔑 Reset Clave`):** Genera una nueva contraseña temporal de un solo uso y fuerza el cambio de contraseña en el siguiente inicio de sesión del usuario.
 - **Reglas de protección del último administrador:** El sistema impide desactivar o quitar el rol `ADMIN` al último administrador activo para garantizar que la plataforma nunca quede huérfana de administración.
 
-### 11.2. 📈 Resultados y Trazabilidad por Usuario (`Administración → Resultados Usuarios`)
-- **Tabla de KPIs por usuario:** Muestra de un vistazo para cada cuenta: nº de exámenes completados, nota media, *Readiness Score*, preguntas dominadas en SM-2, fecha/nota del último intento y fecha del último acceso.
+### 12.2. 📜 Catálogo de Certificaciones y Syllabus (`Administración → Certificaciones`)
+- **Creación y Edición de Certificaciones:** Configuración completa de código único (`FHIR_R4`, `FHIR_R5`, etc.), versión de estándar, nombre descriptivo, nº de preguntas de simulación oficial, duración cronometrada en minutos, nota de corte oficial (%), URL base de la especificación para justificaciones y enlaces, color distintivo, icono/emoji y orden.
+- **Módulos Habilitados (Feature Flags):** Activa o desactiva por certificación las herramientas disponibles (`Motor de Examen`, `Flashcards SM-2`, `Materiales & PDFBox`, `FHIR Search Builder`, `Validador HAPI FHIR`).
+- **Gestión Dinámica de Áreas del Syllabus:** Permite añadir, editar y ordenar las áreas temáticas de cada certificación con su peso porcentual oficial (`weightPercent`). El sistema valida y muestra en tiempo real el balance acumulado (destacando si suma exactamente el 100% oficial).
+- **Duplicación en un Clic (`📑 Duplicar`):** Clona una certificación existente junto con todas sus áreas y pesos del syllabus, creándola inicialmente en estado inactivo para permitir ajustes seguros de temario antes de ponerla a disposición de los alumnos.
+- **Protección de Integridad Referencial:** No es posible eliminar certificaciones ni áreas que contengan preguntas o exámenes asociados en el histórico.
+
+### 12.3. 📈 Resultados y Trazabilidad por Usuario (`Administración → Resultados Usuarios`)
+- **Tabla de KPIs por usuario:** Muestra de un vistazo para cada cuenta en la certificación seleccionada: nº de exámenes completados, nota media, *Readiness Score*, preguntas dominadas en SM-2, fecha/nota del último intento y fecha del último acceso.
 - **Inspección detallada de un usuario (`🔍 Ver Detalle`):**
   - Permite filtrar los datos del usuario por **modo de examen** (`SIMULATION`, `ADAPTIVE`, `TUTOR`, `ERRORS`) y por **rango de fechas** (`Desde` / `Hasta`).
   - Muestra sus tarjetas de KPIs (incluyendo actividad de Flashcards SM-2: tarjetas trabajadas, dominadas y pendientes hoy).
-  - Renderiza el **Mapa de Calor por las 6 áreas del Syllabus** específico de ese alumno.
+  - Renderiza el **Mapa de Calor por las áreas del Syllabus de la certificación activa** específico de ese alumno.
   - Lista su **Historial de Intentos** completo con botón **`🔍 Revisar`** para abrir el desglose pregunta a pregunta (opción marcada, respuesta correcta, tiempo empleado y explicación).
   - Lista las **Preguntas Más Falladas** por ese usuario con su tasa de error individual.
-- **Exportación CSV:** Puedes descargar tanto el **CSV Global** de todos los intentos como el **CSV individual del usuario seleccionado** (respetando los filtros activos).
+- **Exportación CSV:** Puedes descargar tanto el **CSV Global** de todos los intentos como el **CSV individual del usuario seleccionado** (respetando los filtros activos y la certificación).
 
-### 11.3. 🌐 Analítica Global Agregada y Ranking (`Administración → Vista Agregada`)
+### 12.4. 🌐 Analítica Global Agregada y Ranking (`Administración → Vista Agregada`)
 - **Filtros combinables:** Filtra las métricas globales por usuario, modo de examen y rango de fechas, o exporta directamente los resultados filtrados a CSV.
-- **KPIs Globales:** Usuarios activos, total de exámenes completados, nota media global, tasa de aprobados (≥70%), *Readiness Score* medio y total de respuestas analizadas.
-- **Precisión Media Global por Área del Syllabus:** Mapa de calor agregado de toda la organización en los 6 dominios de HL7 FHIR.
+- **KPIs Globales:** Usuarios activos, total de exámenes completados, nota media global, tasa de aprobados, *Readiness Score* medio y total de respuestas analizadas.
+- **Precisión Media Global por Área del Syllabus:** Mapa de calor agregado de toda la organización en las áreas temáticas de la certificación activa.
 - **Top Preguntas con Mayor Tasa de Fallo Global:** Identifica qué preguntas del banco están resultando más difíciles para el conjunto de alumnos.
 - **Ranking y Comparativa de Preparación:** Clasificación ordenada por *Readiness Score* y nota media.
 
-### 11.4. 📋 Registro de Auditoría (`Administración → Auditoría`)
-- Muestra la bitácora inmutable de eventos críticos: inicios y cierres de sesión (`LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`), bloqueos por intentos fallidos (`ACCOUNT_LOCKED`), cambios de contraseña (`PASSWORD_CHANGED`), altas/ediciones/cambios de estado/reseteos de usuarios (`ADMIN_CREATE_USER`, `ADMIN_UPDATE_USER`, `ADMIN_CHANGE_USER_STATUS`, `ADMIN_RESET_PASSWORD`) y bajas lógicas de contenidos (`DELETE_QUESTION`, `DELETE_MATERIAL`), incluyendo fecha/hora, actor, entidad afectada, detalle e IP de origen.
+### 12.5. 📋 Registro de Auditoría (`Administración → Auditoría`)
+- Muestra la bitácora inmutable de eventos críticos: inicios y cierres de sesión (`LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`), bloqueos por intentos fallidos (`ACCOUNT_LOCKED`), cambios de contraseña (`PASSWORD_CHANGED`), altas/ediciones/cambios de estado/reseteos de usuarios (`ADMIN_CREATE_USER`, `ADMIN_UPDATE_USER`, `ADMIN_CHANGE_USER_STATUS`, `ADMIN_RESET_PASSWORD`), operaciones de certificaciones y syllabus, y bajas lógicas de contenidos (`DELETE_QUESTION`, `DELETE_MATERIAL`), incluyendo fecha/hora, actor, entidad afectada, detalle e IP de origen.

@@ -3,6 +3,11 @@ let currentUser = null;
 let isMandatoryPasswordChange = false;
 let editingQuestionId = null;
 
+let currentCertifications = [];
+let activeCertification = null;
+let currentCertificationAreas = [];
+let currentAdminAreasCertId = null;
+
 let currentSession = null;
 let currentQuestionIndex = 0;
 let userAnswers = {}; // questionId -> { selectedOptions, timeSpentSeconds, flagged }
@@ -25,6 +30,25 @@ function getCsrfTokenFromCookie() {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
+function resolveCertObjId(c) {
+    if (!c) return null;
+    const raw = c.certificationId != null ? c.certificationId : c.id;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function getActiveCertificationId() {
+    const stored = localStorage.getItem('activeCertificationId');
+    const storedNum = stored != null ? Number(stored) : NaN;
+    if (Number.isFinite(storedNum) && storedNum > 0) return storedNum;
+    const activeId = resolveCertObjId(activeCertification);
+    if (activeId) return activeId;
+    if (currentCertifications && currentCertifications.length > 0) {
+        return resolveCertObjId(currentCertifications[0]);
+    }
+    return null;
+}
+
 async function apiFetch(url, options = {}) {
     const opts = { ...options };
     opts.credentials = opts.credentials || 'same-origin';
@@ -38,6 +62,12 @@ async function apiFetch(url, options = {}) {
             headers.set('X-XSRF-TOKEN', csrfToken);
         }
     }
+
+    const activeCertId = getActiveCertificationId();
+    if (activeCertId && !headers.has('X-Certification')) {
+        headers.set('X-Certification', String(activeCertId));
+    }
+
     opts.headers = headers;
 
     const resp = await nativeFetch(url, opts);
@@ -266,7 +296,7 @@ function switchTab(tabId, materialSubview = null) {
         'dashboard', 'exam-modes', 'exam-runner', 'exam-result',
         'search-builder', 'resource-inspector', 'flashcards',
         'questions', 'materials',
-        'admin-users', 'admin-results', 'admin-aggregate', 'admin-audit'
+        'admin-users', 'admin-certifications', 'admin-results', 'admin-aggregate', 'admin-audit'
     ];
 
     views.forEach(v => {
@@ -307,6 +337,7 @@ function switchTab(tabId, materialSubview = null) {
     if (tabId === 'flashcards') loadFlashcards();
     if (tabId === 'questions') loadQuestions();
     if (tabId === 'admin-users') loadAdminUsers(0);
+    if (tabId === 'admin-certifications') loadAdminCertifications();
     if (tabId === 'admin-results') loadAdminUsersKpiList();
     if (tabId === 'admin-aggregate') loadAdminAggregateView();
     if (tabId === 'admin-audit') loadAdminAuditLogs(0);
@@ -331,7 +362,11 @@ function populateTopicSelects() {
         'mat-topic-select', 'import-url-topic-id', 'import-md-topic-id',
         'import-json-topic-id', 'import-cards-topic-id'
     ];
+    const areaControlledSelects = new Set(['q-topic-select', 'upload-topic-id', 'new-q-topic-id']);
     selects.forEach(selectId => {
+        if (areaControlledSelects.has(selectId) && currentCertificationAreas && currentCertificationAreas.length > 0) {
+            return;
+        }
         const el = document.getElementById(selectId);
         if (!el) return;
         const firstOption = el.options[0];
@@ -530,7 +565,12 @@ async function executeStartExam(requestPayload) {
         });
 
         if (!resp.ok) {
-            showToast('No se pudo iniciar la sesión de examen.', 'error');
+            let errMsg = 'No se pudo iniciar la sesión de examen.';
+            try {
+                const errData = await resp.json();
+                if (errData && errData.message) errMsg = errData.message;
+            } catch (_) {}
+            showToast(errMsg, 'error');
             return;
         }
 
@@ -1236,8 +1276,10 @@ function filterQuestions() {
     const topicId = document.getElementById('q-topic-select').value;
 
     const filtered = allQuestions.filter(q => {
-        const matchKw = !kw || q.stem.toLowerCase().includes(kw) || q.explanation.toLowerCase().includes(kw);
-        const matchTopic = !topicId || (q.topic && q.topic.id == topicId);
+        const matchKw = !kw || (q.stem && q.stem.toLowerCase().includes(kw)) || (q.explanation && q.explanation.toLowerCase().includes(kw));
+        const matchTopic = !topicId
+            || (q.area && (String(q.area.id) === String(topicId) || q.area.code === topicId))
+            || (q.topic && String(q.topic.id) === String(topicId));
         return matchKw && matchTopic;
     });
 
@@ -1282,7 +1324,7 @@ function renderQuestionsList(questions) {
 
         card.innerHTML = `
             <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span class="font-semibold text-blue-400">${q.topic ? q.topic.name : 'General'}</span>
+                <span class="font-semibold text-blue-400">${q.area ? q.area.name : (q.topic ? q.topic.name : 'General')}</span>
                 <div class="flex flex-wrap items-center gap-1.5">
                     ${ownerBadge}
                     <span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">${q.source}</span>
@@ -1339,7 +1381,11 @@ async function loadMaterials() {
 
 function populateMaterialSelects() {
     const selects = ['modal-material-id', 'new-q-material-id', 'import-json-material-id'];
+    const areaControlledSelects = new Set(['q-topic-select', 'upload-topic-id', 'new-q-topic-id']);
     selects.forEach(selectId => {
+        if (areaControlledSelects.has(selectId) && currentCertificationAreas && currentCertificationAreas.length > 0) {
+            return;
+        }
         const el = document.getElementById(selectId);
         if (!el) return;
         const firstOption = el.options[0];
@@ -4840,6 +4886,10 @@ function showAuthenticatedApp(user) {
         return;
     }
 
+    // Inicializar sistema de certificaciones del usuario
+    currentCertifications = user.certifications || [];
+    initUserCertificationSelection(user);
+
     // Cargar datos iniciales del usuario autenticado
     loadTopics();
     loadDashboard();
@@ -5184,6 +5234,7 @@ function openCreateUserModal() {
     document.getElementById('admin-form-role').value = 'USER';
     document.getElementById('admin-form-password').value = '';
     document.getElementById('admin-form-password-group').classList.remove('hidden');
+    populateAdminUserCertificationsCheckboxes([getActiveCertificationId() || 1]);
     openModal('modal-admin-user-form');
 }
 
@@ -5199,7 +5250,40 @@ function openEditUserModal(userId) {
     document.getElementById('admin-form-email').value = u.email || '';
     document.getElementById('admin-form-role').value = u.role || 'USER';
     document.getElementById('admin-form-password-group').classList.add('hidden');
+    populateAdminUserCertificationsCheckboxes(u.certificationIds || []);
     openModal('modal-admin-user-form');
+}
+
+async function populateAdminUserCertificationsCheckboxes(selectedCertIds = []) {
+    const container = document.getElementById('admin-user-certifications-checkboxes');
+    if (!container) return;
+    try {
+        const resp = await apiFetch('/api/admin/certifications');
+        if (!resp.ok) return;
+        const certs = await resp.json();
+        container.innerHTML = '';
+        if (certs.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-[11px]">No hay certificaciones registradas</span>';
+            return;
+        }
+        certs.forEach(c => {
+            const isChecked = selectedCertIds && selectedCertIds.includes(c.id);
+            const label = document.createElement('label');
+            label.className = 'flex items-center gap-2 text-slate-300 hover:text-white cursor-pointer select-none py-0.5';
+            label.innerHTML = `
+                <input type="checkbox" name="admin-user-cert" value="${c.id}" ${isChecked ? 'checked' : ''} class="rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-0">
+                <span class="flex items-center gap-1.5 font-mono text-[11px]">
+                    <span>${c.icon || '🧬'}</span>
+                    <strong class="text-white">${c.code}</strong>
+                    <span class="text-slate-400">(${c.name})</span>
+                    ${!c.active ? '<span class="text-[9px] text-rose-400 font-bold">[INACTIVA]</span>' : ''}
+                </span>
+            `;
+            container.appendChild(label);
+        });
+    } catch (e) {
+        container.innerHTML = '<span class="text-rose-400 text-[11px]">Error al cargar lista de certificaciones</span>';
+    }
 }
 
 async function submitAdminUserForm(event) {
@@ -5211,12 +5295,15 @@ async function submitAdminUserForm(event) {
     const role = document.getElementById('admin-form-role').value;
     const password = document.getElementById('admin-form-password').value;
 
+    const certCheckboxes = document.querySelectorAll('input[name="admin-user-cert"]:checked');
+    const certificationIds = Array.from(certCheckboxes).map(cb => Number(cb.value));
+
     const isEdit = Boolean(userId);
     const url = isEdit ? `/api/admin/users/${userId}` : '/api/admin/users';
     const method = isEdit ? 'PUT' : 'POST';
     const body = isEdit
-        ? { displayName, email, role }
-        : { username, displayName, email, role, password: password || null };
+        ? { displayName, email, role, certificationIds }
+        : { username, displayName, email, role, password: password || null, certificationIds };
 
     try {
         const resp = await apiFetch(url, {
@@ -5671,6 +5758,710 @@ async function loadAdminAuditLogs(page = 0) {
         console.error('Error cargando auditoría:', e);
     }
 }
+
+// =======================================================================
+// PLATAFORMA MULTI-CERTIFICACIÓN (CLIENTE & SELECTORES)
+// =======================================================================
+
+function initUserCertificationSelection(user) {
+    currentCertifications = (user.certifications || []).map(c => ({
+        ...c,
+        id: resolveCertObjId(c),
+        certificationId: resolveCertObjId(c)
+    })).filter(c => c.id != null);
+
+    let savedId = localStorage.getItem('activeCertificationId');
+    let targetCert = null;
+
+    if (savedId) {
+        const idNum = Number(savedId);
+        if (Number.isFinite(idNum) && idNum > 0) {
+            targetCert = currentCertifications.find(c => resolveCertObjId(c) === idNum);
+        }
+    }
+
+    if (!targetCert && user.activeCertificationId) {
+        const activeIdNum = Number(user.activeCertificationId);
+        targetCert = currentCertifications.find(c => resolveCertObjId(c) === activeIdNum);
+    }
+
+    if (!targetCert && user.activeCertification) {
+        const activeObjId = resolveCertObjId(user.activeCertification);
+        targetCert = currentCertifications.find(c => resolveCertObjId(c) === activeObjId) || user.activeCertification;
+    }
+
+    if (!targetCert && currentCertifications.length > 0) {
+        targetCert = currentCertifications[0];
+    }
+
+    if (targetCert && resolveCertObjId(targetCert)) {
+        const resolvedId = resolveCertObjId(targetCert);
+        targetCert.id = resolvedId;
+        targetCert.certificationId = resolvedId;
+        activeCertification = targetCert;
+        localStorage.setItem('activeCertificationId', String(resolvedId));
+    } else {
+        activeCertification = null;
+        localStorage.removeItem('activeCertificationId');
+    }
+
+    renderHeaderCertificationSelector();
+    if (activeCertification) {
+        applyCertificationFeatureFlags(activeCertification);
+        loadActiveCertificationAreas();
+    }
+}
+
+let certSwitchSeq = 0;
+let headerCertMenuListenersAttached = false;
+
+function closeHeaderCertMenu() {
+    const menuEl = document.getElementById('header-cert-menu');
+    const chevronEl = document.getElementById('header-cert-chevron');
+    if (menuEl) menuEl.classList.add('hidden');
+    if (chevronEl) chevronEl.classList.remove('rotate-180');
+}
+
+function toggleHeaderCertMenu(event) {
+    if (event) event.stopPropagation();
+    if (!currentCertifications || currentCertifications.length <= 1) return;
+    const menuEl = document.getElementById('header-cert-menu');
+    const chevronEl = document.getElementById('header-cert-chevron');
+    if (!menuEl) return;
+    const isHidden = menuEl.classList.contains('hidden');
+    if (isHidden) {
+        menuEl.classList.remove('hidden');
+        if (chevronEl) chevronEl.classList.add('rotate-180');
+    } else {
+        closeHeaderCertMenu();
+    }
+}
+
+function selectHeaderCertification(certId) {
+    closeHeaderCertMenu();
+    handleCertificationChange(certId);
+}
+
+function ensureHeaderCertMenuListeners() {
+    if (headerCertMenuListenersAttached) return;
+    headerCertMenuListenersAttached = true;
+    document.addEventListener('click', (e) => {
+        const widget = document.getElementById('header-certification-widget');
+        if (widget && !widget.contains(e.target)) {
+            closeHeaderCertMenu();
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeHeaderCertMenu();
+    });
+}
+
+function renderHeaderCertificationSelector() {
+    ensureHeaderCertMenuListeners();
+    const triggerEl = document.getElementById('header-cert-trigger');
+    const menuEl = document.getElementById('header-cert-menu');
+    const badgeEl = document.getElementById('header-cert-badge');
+    const chevronEl = document.getElementById('header-cert-chevron');
+    const iconEl = document.getElementById('header-cert-icon');
+    const standardBadgeEl = document.getElementById('header-current-standard-badge');
+
+    if (!badgeEl) return;
+
+    const esc = (s) => String(s || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+
+    if (currentCertifications.length > 1) {
+        if (triggerEl) {
+            triggerEl.classList.add('cursor-pointer');
+            triggerEl.disabled = false;
+        }
+        if (chevronEl) chevronEl.classList.remove('hidden');
+        if (activeCertification) {
+            badgeEl.textContent = `${activeCertification.code} (${activeCertification.version || activeCertification.standardVersion || 'FHIR'})`;
+        }
+        if (menuEl) {
+            const activeId = resolveCertObjId(activeCertification);
+            menuEl.innerHTML = currentCertifications.map(c => {
+                const cId = resolveCertObjId(c);
+                const isSelected = activeId != null && activeId === cId;
+                const versionLabel = c.version || c.standardVersion || 'FHIR';
+                const itemCls = isSelected
+                    ? 'bg-blue-600/20 text-white border border-blue-500/40'
+                    : 'text-slate-200 hover:bg-slate-800/90 border border-transparent';
+                return `
+                    <button type="button" onclick="selectHeaderCertification(${cId})"
+                        class="w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-left transition cursor-pointer ${itemCls}">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-base shrink-0">${esc(c.icon || '🧬')}</span>
+                            <div class="min-w-0">
+                                <div class="text-xs font-bold truncate">${esc(c.code)} <span class="text-[10px] font-mono text-slate-400">(${esc(versionLabel)})</span></div>
+                                <div class="text-[11px] text-slate-400 truncate">${esc(c.name)}</div>
+                            </div>
+                        </div>
+                        ${isSelected ? '<span class="text-xs font-bold text-blue-400 shrink-0">✓</span>' : ''}
+                    </button>
+                `;
+            }).join('');
+        }
+    } else if (currentCertifications.length === 1) {
+        if (triggerEl) {
+            triggerEl.classList.remove('cursor-pointer');
+            triggerEl.disabled = true;
+        }
+        if (chevronEl) chevronEl.classList.add('hidden');
+        closeHeaderCertMenu();
+        const c = currentCertifications[0];
+        badgeEl.textContent = `${c.code} (${c.version || c.standardVersion || 'FHIR'})`;
+    } else {
+        if (triggerEl) {
+            triggerEl.classList.remove('cursor-pointer');
+            triggerEl.disabled = true;
+        }
+        if (chevronEl) chevronEl.classList.add('hidden');
+        closeHeaderCertMenu();
+        badgeEl.textContent = 'Sin certificación';
+    }
+
+    if (activeCertification) {
+        if (iconEl) iconEl.textContent = activeCertification.icon || '🧬';
+        if (standardBadgeEl) {
+            standardBadgeEl.textContent = `${activeCertification.name} (${activeCertification.version || activeCertification.standardVersion || 'FHIR'})`;
+        }
+    }
+}
+
+async function handleCertificationChange(newCertIdStr) {
+    const newCertId = Number(newCertIdStr);
+    const found = currentCertifications.find(c => resolveCertObjId(c) === newCertId);
+    if (!found) return;
+
+    const resolvedId = resolveCertObjId(found);
+    found.id = resolvedId;
+    found.certificationId = resolvedId;
+    const seq = ++certSwitchSeq;
+    activeCertification = found;
+    localStorage.setItem('activeCertificationId', String(resolvedId));
+    allQuestions = [];
+    allMaterials = [];
+    const qSearch = document.getElementById('q-search-input');
+    if (qSearch) qSearch.value = '';
+    const qTopic = document.getElementById('q-topic-select');
+    if (qTopic) qTopic.value = '';
+
+    renderHeaderCertificationSelector();
+    applyCertificationFeatureFlags(found);
+    showToast(`Certificación activa: ${found.name}`, 'info', 2200);
+
+    // Determinar pestaña activa y si sigue habilitada con los feature flags de la nueva certificación
+    const activeBtn = document.querySelector('.tab-btn.active');
+    let activeTab = activeBtn ? activeBtn.id.replace('btn-tab-', '') : 'dashboard';
+    if (activeBtn && activeBtn.classList.contains('hidden')) {
+        switchTab('dashboard');
+        await loadActiveCertificationAreas();
+        return;
+    }
+
+    const reloadActiveTab = async () => {
+        if (activeTab === 'dashboard') return loadDashboard();
+        if (activeTab === 'questions') return loadQuestions();
+        if (activeTab === 'flashcards') return loadFlashcards();
+        if (activeTab === 'materials' || activeTab === 'study-cards') return loadMaterials();
+        if (activeTab === 'admin-results') return loadAdminUsersKpiList();
+        if (activeTab === 'admin-aggregate') return loadAdminAggregateView();
+    };
+
+    // Cargar áreas y vista activa en paralelo para reducir la latencia de cambio
+    await Promise.all([
+        loadActiveCertificationAreas(),
+        reloadActiveTab()
+    ]);
+
+    if (seq !== certSwitchSeq) return;
+}
+
+function applyCertificationFeatureFlags(cert) {
+    if (!cert) return;
+    const flags = cert.featureFlags || '';
+    const hasSearch = flags.includes('REST_SEARCH_BUILDER');
+    const hasValidator = flags.includes('RESOURCE_VALIDATOR');
+
+    const btnSearch = document.getElementById('btn-tab-search-builder');
+    const btnValidator = document.getElementById('btn-tab-resource-inspector');
+
+    if (btnSearch) {
+        if (hasSearch) btnSearch.classList.remove('hidden');
+        else btnSearch.classList.add('hidden');
+    }
+    if (btnValidator) {
+        if (hasValidator) btnValidator.classList.remove('hidden');
+        else btnValidator.classList.add('hidden');
+    }
+}
+
+async function loadActiveCertificationAreas() {
+    try {
+        const resp = await apiFetch('/api/certifications/areas');
+        if (resp.ok) {
+            currentCertificationAreas = await resp.json();
+            populateCertificationAreaSelects();
+        }
+    } catch (e) {
+        console.error('Error cargando áreas del syllabus:', e);
+    }
+}
+
+function populateCertificationAreaSelects() {
+    if (!currentCertificationAreas || currentCertificationAreas.length === 0) return;
+
+    // Actualizar selectores de temas en toda la aplicación
+    const selectsToUpdate = ['q-topic-select', 'upload-topic-id', 'new-q-topic-id', 'cards-catalog-topic-select'];
+    selectsToUpdate.forEach(id => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const currentVal = select.value;
+        const hasAll = select.options.length > 0 && select.options[0].value === '';
+
+        select.innerHTML = hasAll ? '<option value="">Todos los Temas / Áreas</option>' : '';
+        currentCertificationAreas.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            opt.textContent = `${a.name} (${a.weightPercent}%)`;
+            select.appendChild(opt);
+        });
+        if (currentVal) select.value = currentVal;
+    });
+}
+
+// =======================================================================
+// ADMINISTRACIÓN DE CERTIFICACIONES Y SYLLABUS (SOLO ADMIN)
+// =======================================================================
+
+let adminCertificationsCache = [];
+let adminCertificationAreasCache = [];
+
+async function loadAdminCertifications() {
+    const tbody = document.getElementById('admin-certifications-table-body');
+    if (!tbody) return;
+
+    try {
+        const resp = await apiFetch('/api/admin/certifications');
+        if (!resp.ok) return;
+        adminCertificationsCache = await resp.json();
+
+        if (adminCertificationsCache.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="py-6 text-center text-slate-500">No hay certificaciones configuradas.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = adminCertificationsCache.map(c => {
+            const statusBadge = c.active
+                ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ACTIVA</span>'
+                : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">INACTIVA</span>';
+
+            const areasCount = c.areas ? c.areas.length : 0;
+
+            return `
+                <tr class="hover:bg-slate-900/50 transition">
+                    <td class="py-3 px-4">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-xl p-1.5 rounded-lg bg-slate-900 border border-slate-700">${c.icon || '🧬'}</span>
+                            <div>
+                                <div class="font-bold text-white flex items-center gap-2">
+                                    <span>${c.name}</span>
+                                    <span class="px-1.5 py-0.2 rounded font-mono text-[9px] font-bold text-blue-300 bg-blue-500/20 border border-blue-500/30">${c.code}</span>
+                                </div>
+                                <div class="text-[11px] text-slate-400 truncate max-w-xs">${c.description || 'Sin descripción'}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono font-bold text-slate-300">${c.version || c.standardVersion || 'R4'}</td>
+                    <td class="py-3 px-4 text-center font-mono text-slate-300">
+                        <strong>${c.examQuestionCount}</strong> preg • <strong>${c.examDurationMinutes}</strong> min
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono font-bold text-emerald-400">${c.passingScorePercent}%</td>
+                    <td class="py-3 px-4 text-center font-mono text-slate-300">
+                        <button onclick="openCertificationAreasModal(${c.id})" class="text-indigo-400 hover:text-indigo-300 font-bold underline cursor-pointer">
+                            ${areasCount} áreas
+                        </button>
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono text-slate-400">
+                        <span>${c.totalQuestionsCount || 0} preg</span> / <span class="text-slate-300">${c.assignedUsersCount || 0} users</span>
+                    </td>
+                    <td class="py-3 px-4 text-center">${statusBadge}</td>
+                    <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                        <button onclick="openCertificationAreasModal(${c.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold cursor-pointer" title="Configurar Syllabus Oficial">
+                            🎯 Syllabus
+                        </button>
+                        <button onclick="openEditCertificationModal(${c.id})" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold cursor-pointer">
+                            ✏️ Editar
+                        </button>
+                        <button onclick="duplicateCertification(${c.id})" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-[11px] font-semibold cursor-pointer" title="Clonar con todas sus áreas">
+                            📑 Duplicar
+                        </button>
+                        <button onclick="toggleCertificationActive(${c.id}, ${!c.active})" class="px-2.5 py-1 rounded-lg ${c.active ? 'bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30'} text-[11px] font-semibold cursor-pointer">
+                            ${c.active ? '🚫 Desactivar' : '✅ Activar'}
+                        </button>
+                        <button onclick="deleteCertification(${c.id})" class="px-2.5 py-1 rounded-lg bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 text-[11px] font-semibold cursor-pointer" title="Eliminar certificación">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        showToast('Error cargando certificaciones.', 'error');
+    }
+}
+
+function openCreateCertificationModal() {
+    document.getElementById('admin-cert-modal-title').innerHTML = '<span>📜</span> Crear Nueva Certificación';
+    document.getElementById('admin-cert-id').value = '';
+    document.getElementById('admin-cert-code').value = '';
+    document.getElementById('admin-cert-code').disabled = false;
+    document.getElementById('admin-cert-version').value = 'R5';
+    document.getElementById('admin-cert-name').value = '';
+    document.getElementById('admin-cert-desc').value = '';
+    document.getElementById('admin-cert-questions').value = 50;
+    document.getElementById('admin-cert-duration').value = 90;
+    document.getElementById('admin-cert-pass-score').value = 70.0;
+    document.getElementById('admin-cert-spec-url').value = 'https://hl7.org/fhir/R5/';
+    document.getElementById('admin-cert-icon').value = '🧬';
+    document.getElementById('admin-cert-color').value = '#3b82f6';
+    document.getElementById('admin-cert-sort').value = (adminCertificationsCache.length + 1);
+
+    document.getElementById('admin-flag-exam').checked = true;
+    document.getElementById('admin-flag-flashcards').checked = true;
+    document.getElementById('admin-flag-materials').checked = true;
+    document.getElementById('admin-flag-search').checked = true;
+    document.getElementById('admin-flag-validator').checked = true;
+    document.getElementById('admin-cert-active').checked = true;
+
+    openModal('modal-admin-cert-form');
+}
+
+function openEditCertificationModal(certId) {
+    const c = adminCertificationsCache.find(item => item.id === certId);
+    if (!c) return;
+
+    document.getElementById('admin-cert-modal-title').innerHTML = `<span>✏️</span> Editar Certificación ${c.code}`;
+    document.getElementById('admin-cert-id').value = c.id;
+    document.getElementById('admin-cert-code').value = c.code;
+    document.getElementById('admin-cert-code').disabled = true;
+    document.getElementById('admin-cert-version').value = c.version || c.standardVersion || 'R4';
+    document.getElementById('admin-cert-name').value = c.name || '';
+    document.getElementById('admin-cert-desc').value = c.description || '';
+    document.getElementById('admin-cert-questions').value = c.examQuestionCount || 50;
+    document.getElementById('admin-cert-duration').value = c.examDurationMinutes || 90;
+    document.getElementById('admin-cert-pass-score').value = c.passingScorePercent || 70.0;
+    document.getElementById('admin-cert-spec-url').value = c.specBaseUrl || '';
+    document.getElementById('admin-cert-icon').value = c.icon || '🧬';
+    document.getElementById('admin-cert-color').value = c.color || '#3b82f6';
+    document.getElementById('admin-cert-sort').value = c.sortOrder || 1;
+
+    const flags = c.featureFlags || '';
+    document.getElementById('admin-flag-exam').checked = flags.includes('EXAM');
+    document.getElementById('admin-flag-flashcards').checked = flags.includes('FLASHCARDS');
+    document.getElementById('admin-flag-materials').checked = flags.includes('MATERIALS');
+    document.getElementById('admin-flag-search').checked = flags.includes('REST_SEARCH_BUILDER');
+    document.getElementById('admin-flag-validator').checked = flags.includes('RESOURCE_VALIDATOR');
+    document.getElementById('admin-cert-active').checked = Boolean(c.active);
+
+    openModal('modal-admin-cert-form');
+}
+
+async function submitAdminCertForm(event) {
+    event.preventDefault();
+    const certId = document.getElementById('admin-cert-id').value;
+    const isEdit = Boolean(certId);
+
+    const flags = [];
+    if (document.getElementById('admin-flag-exam').checked) flags.push('EXAM');
+    if (document.getElementById('admin-flag-flashcards').checked) flags.push('FLASHCARDS');
+    if (document.getElementById('admin-flag-materials').checked) flags.push('MATERIALS');
+    if (document.getElementById('admin-flag-search').checked) flags.push('REST_SEARCH_BUILDER');
+    if (document.getElementById('admin-flag-validator').checked) flags.push('RESOURCE_VALIDATOR');
+
+    const payload = {
+        code: document.getElementById('admin-cert-code').value.trim().toUpperCase(),
+        name: document.getElementById('admin-cert-name').value.trim(),
+        description: document.getElementById('admin-cert-desc').value.trim(),
+        standardVersion: document.getElementById('admin-cert-version').value,
+        examQuestionCount: Number(document.getElementById('admin-cert-questions').value),
+        examDurationMinutes: Number(document.getElementById('admin-cert-duration').value),
+        passingScorePercent: Number(document.getElementById('admin-cert-pass-score').value),
+        specBaseUrl: document.getElementById('admin-cert-spec-url').value.trim(),
+        icon: document.getElementById('admin-cert-icon').value.trim() || '🧬',
+        color: document.getElementById('admin-cert-color').value || '#3b82f6',
+        sortOrder: Number(document.getElementById('admin-cert-sort').value) || 1,
+        featureFlags: flags.join(','),
+        active: document.getElementById('admin-cert-active').checked
+    };
+
+    const url = isEdit ? `/api/admin/certifications/${certId}` : '/api/admin/certifications';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const resp = await apiFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+            closeModal('modal-admin-cert-form');
+            showToast(`Certificación ${payload.code} guardada con éxito.`, 'success');
+            await loadAdminCertifications();
+            // Refrescar selector si es admin
+            const meResp = await apiFetch('/api/auth/me');
+            if (meResp.ok) {
+                const me = await meResp.json();
+                currentUser = me;
+                initUserCertificationSelection(me);
+            }
+        } else {
+            showToast(data.error || 'No se pudo guardar la certificación.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al guardar la certificación.', 'error');
+    }
+}
+
+async function duplicateCertification(certId) {
+    const c = adminCertificationsCache.find(item => item.id === certId);
+    if (!c) return;
+
+    const defaultNewCode = `${c.code}_CLON`;
+    const defaultNewName = `${c.name} (Clon)`;
+
+    const confirmed = await showConfirmDialog(
+        `¿Duplicar certificación ${c.code}?`,
+        `Se creará una copia completa con todas sus áreas y pesos del syllabus asignadas. La nueva certificación se creará en estado inactivo por seguridad para su revisión previa.`,
+        { confirmText: 'Duplicar Certificación', danger: false }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/certifications/${certId}/duplicate?newCode=${encodeURIComponent(defaultNewCode)}&newName=${encodeURIComponent(defaultNewName)}`, {
+            method: 'POST'
+        });
+        if (resp.ok) {
+            showToast(`Certificación clonada como ${defaultNewCode} (inactiva).`, 'success');
+            await loadAdminCertifications();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo duplicar la certificación.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al duplicar la certificación.', 'error');
+    }
+}
+
+async function toggleCertificationActive(certId, newActive) {
+    const c = adminCertificationsCache.find(item => item.id === certId);
+    if (!c) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/certifications/${certId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: newActive })
+        });
+        if (resp.ok) {
+            showToast(`Certificación ${c.code} ${newActive ? 'activada' : 'desactivada'}.`, 'success');
+            await loadAdminCertifications();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo cambiar el estado.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al cambiar estado de la certificación.', 'error');
+    }
+}
+
+async function deleteCertification(certId) {
+    const c = adminCertificationsCache.find(item => item.id === certId);
+    if (!c) return;
+
+    const confirmed = await showConfirmDialog(
+        `¿Eliminar certificación ${c.code}?`,
+        `Esta acción es permanente. Solo se permite eliminar certificaciones que no contengan preguntas ni exámenes realizados.`,
+        { confirmText: 'Eliminar Definitivamente', danger: true }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/certifications/${certId}`, {
+            method: 'DELETE'
+        });
+        if (resp.ok) {
+            showToast(`Certificación ${c.code} eliminada.`, 'success');
+            await loadAdminCertifications();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo eliminar la certificación.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al eliminar la certificación.', 'error');
+    }
+}
+
+// ---------------- Áreas del Syllabus Oficial ----------------
+
+async function openCertificationAreasModal(certId) {
+    currentAdminAreasCertId = certId;
+    const c = adminCertificationsCache.find(item => item.id === certId);
+    if (c) {
+        document.getElementById('admin-areas-modal-title').innerHTML = `<span>🎯</span> Áreas del Syllabus: ${c.name} (${c.code})`;
+    }
+    resetAdminAreaForm();
+    await loadAdminCertificationAreas(certId);
+    openModal('modal-admin-cert-areas');
+}
+
+async function loadAdminCertificationAreas(certId) {
+    const tbody = document.getElementById('admin-areas-table-body');
+    if (!tbody) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/certifications/${certId}/areas`);
+        if (!resp.ok) return;
+        adminCertificationAreasCache = await resp.json();
+
+        let totalWeight = 0;
+        adminCertificationAreasCache.forEach(a => totalWeight += (a.weightPercent || 0));
+
+        const weightEl = document.getElementById('admin-areas-weight-total');
+        const statusEl = document.getElementById('admin-areas-weight-status');
+        if (weightEl) weightEl.textContent = `${totalWeight.toFixed(1)}%`;
+        if (statusEl) {
+            if (Math.abs(totalWeight - 100.0) < 0.05) {
+                statusEl.className = 'text-[11px] font-semibold text-emerald-400';
+                statusEl.textContent = '✓ Balance oficial perfecto (100%)';
+            } else {
+                statusEl.className = 'text-[11px] font-semibold text-amber-400';
+                statusEl.textContent = `⚠️ El balance suma ${totalWeight.toFixed(1)}% (se recomienda 100%)`;
+            }
+        }
+
+        if (adminCertificationAreasCache.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">Sin áreas configuradas en este temario.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = adminCertificationAreasCache.map(a => `
+            <tr class="hover:bg-slate-900/60 transition">
+                <td class="py-2.5 px-3 font-mono text-slate-400 font-bold">${a.sortOrder || 1}</td>
+                <td class="py-2.5 px-3 font-mono font-bold text-blue-400">${a.code}</td>
+                <td class="py-2.5 px-3 font-medium text-white">${a.name}</td>
+                <td class="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">${a.weightPercent}%</td>
+                <td class="py-2.5 px-3 text-center font-mono text-slate-400">${a.questionCount || 0} preg</td>
+                <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
+                    <button onclick="editAdminArea(${a.id})" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold cursor-pointer">
+                        ✏️ Editar
+                    </button>
+                    <button onclick="deleteCertificationArea(${a.id})" class="px-2 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30 text-[10px] font-semibold cursor-pointer">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        showToast('Error cargando áreas del temario.', 'error');
+    }
+}
+
+function resetAdminAreaForm() {
+    document.getElementById('admin-area-id').value = '';
+    document.getElementById('admin-area-code').value = '';
+    document.getElementById('admin-area-name').value = '';
+    document.getElementById('admin-area-weight').value = '';
+    document.getElementById('admin-area-form-heading').textContent = 'Añadir Nueva Área al Syllabus:';
+    document.getElementById('btn-submit-area-form').textContent = '＋ Guardar Área';
+    document.getElementById('btn-cancel-area-edit').classList.add('hidden');
+}
+
+function editAdminArea(areaId) {
+    const a = adminCertificationAreasCache.find(item => item.id === areaId);
+    if (!a) return;
+
+    document.getElementById('admin-area-id').value = a.id;
+    document.getElementById('admin-area-code').value = a.code;
+    document.getElementById('admin-area-name').value = a.name;
+    document.getElementById('admin-area-weight').value = a.weightPercent;
+    document.getElementById('admin-area-form-heading').textContent = `✏️ Editando Área ${a.code}:`;
+    document.getElementById('btn-submit-area-form').textContent = 'Actualizar Área';
+    document.getElementById('btn-cancel-area-edit').classList.remove('hidden');
+}
+
+async function submitAdminAreaForm(event) {
+    event.preventDefault();
+    if (!currentAdminAreasCertId) return;
+
+    const areaId = document.getElementById('admin-area-id').value;
+    const isEdit = Boolean(areaId);
+
+    const payload = {
+        code: document.getElementById('admin-area-code').value.trim().toUpperCase(),
+        name: document.getElementById('admin-area-name').value.trim(),
+        weightPercent: Number(document.getElementById('admin-area-weight').value),
+        sortOrder: isEdit ? undefined : (adminCertificationAreasCache.length + 1)
+    };
+
+    const url = isEdit
+        ? `/api/admin/certifications/${currentAdminAreasCertId}/areas/${areaId}`
+        : `/api/admin/certifications/${currentAdminAreasCertId}/areas`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const resp = await apiFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (resp.ok) {
+            showToast(`Área ${payload.code} guardada con éxito.`, 'success');
+            resetAdminAreaForm();
+            await loadAdminCertificationAreas(currentAdminAreasCertId);
+            await loadAdminCertifications();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo guardar el área.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al guardar el área.', 'error');
+    }
+}
+
+async function deleteCertificationArea(areaId) {
+    if (!currentAdminAreasCertId) return;
+    const a = adminCertificationAreasCache.find(item => item.id === areaId);
+    if (!a) return;
+
+    const confirmed = await showConfirmDialog(
+        `¿Eliminar el área ${a.code}?`,
+        `Si existen preguntas vinculadas a este área, la eliminación será rechazada para proteger la integridad de los datos.`,
+        { confirmText: 'Eliminar Área', danger: true }
+    );
+    if (!confirmed) return;
+
+    try {
+        const resp = await apiFetch(`/api/admin/certifications/${currentAdminAreasCertId}/areas/${areaId}`, {
+            method: 'DELETE'
+        });
+        if (resp.ok) {
+            showToast(`Área ${a.code} eliminada.`, 'success');
+            await loadAdminCertificationAreas(currentAdminAreasCertId);
+            await loadAdminCertifications();
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || 'No se pudo eliminar el área.', 'error');
+        }
+    } catch (e) {
+        showToast('Error de red al eliminar el área.', 'error');
+    }
+}
+
 
 
 

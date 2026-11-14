@@ -1,5 +1,7 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.Certification;
+import com.fhir.examapp.domain.CertificationArea;
 import com.fhir.examapp.domain.ExamAttempt;
 import com.fhir.examapp.domain.ExamAttemptAnswer;
 import com.fhir.examapp.domain.Question;
@@ -12,7 +14,10 @@ import com.fhir.examapp.domain.User;
 import com.fhir.examapp.dto.MaterialEvolutionPointDTO;
 import com.fhir.examapp.dto.MaterialQuestionPerformanceDTO;
 import com.fhir.examapp.dto.MaterialStatsDTO;
+import com.fhir.examapp.repository.CertificationAreaRepository;
+import com.fhir.examapp.repository.CertificationRepository;
 import com.fhir.examapp.repository.ExamAttemptAnswerRepository;
+import com.fhir.examapp.security.CertificationContextHelper;
 import com.fhir.examapp.repository.ExamAttemptRepository;
 import com.fhir.examapp.repository.QuestionOptionRepository;
 import com.fhir.examapp.repository.QuestionRepository;
@@ -20,6 +25,7 @@ import com.fhir.examapp.repository.StudyCardCommentRepository;
 import com.fhir.examapp.repository.StudyMaterialRepository;
 import com.fhir.examapp.repository.SyllabusTopicRepository;
 import com.fhir.examapp.security.SecurityContextHelper;
+import org.springframework.security.access.AccessDeniedException;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -53,6 +59,31 @@ public class StudyMaterialService {
     private final StudyCardCommentRepository studyCardCommentRepository;
     private final SecurityContextHelper securityContextHelper;
     private final AuditService auditService;
+    private CertificationRepository certificationRepository;
+    private CertificationAreaRepository certificationAreaRepository;
+    private CertificationContextHelper certificationContextHelper;
+
+    @Autowired
+    public void setCertificationRepositories(@Autowired(required = false) CertificationRepository certificationRepository,
+                                            @Autowired(required = false) CertificationAreaRepository certificationAreaRepository,
+                                            @Autowired(required = false) CertificationContextHelper certificationContextHelper) {
+        this.certificationRepository = certificationRepository;
+        this.certificationAreaRepository = certificationAreaRepository;
+        this.certificationContextHelper = certificationContextHelper;
+    }
+
+    private Long resolveCertId(Long explicitCertId) {
+        if (explicitCertId != null) return explicitCertId;
+        if (certificationContextHelper != null) {
+            try {
+                Certification cert = certificationContextHelper.resolveActiveCertification();
+                if (cert != null) return cert.getId();
+            } catch (AccessDeniedException e) {
+                throw e;
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
 
     public StudyMaterialService(StudyMaterialRepository studyMaterialRepository,
                                 SyllabusTopicRepository syllabusTopicRepository,
@@ -111,6 +142,26 @@ public class StudyMaterialService {
         throw new AccessDeniedException("No tiene permiso para modificar o eliminar un material creado por otro usuario.");
     }
 
+    private Certification resolveCertificationForTopicOrFallback(Long topicId) {
+        if (certificationAreaRepository != null && topicId != null) {
+            java.util.Optional<CertificationArea> areaOpt = certificationAreaRepository.findById(topicId);
+            if (areaOpt.isPresent() && areaOpt.get().getCertification() != null) {
+                return areaOpt.get().getCertification();
+            }
+        }
+        if (certificationRepository != null) {
+            return certificationRepository.findById(1L).orElse(null);
+        }
+        return null;
+    }
+
+    private CertificationArea resolveAreaForTopic(Long topicId) {
+        if (certificationAreaRepository != null && topicId != null) {
+            return certificationAreaRepository.findById(topicId).orElse(null);
+        }
+        return null;
+    }
+
     /**
      * Procesa un PDF de apuntes o curso con Apache PDFBox y lo indexa asociado a un tema.
      */
@@ -153,6 +204,8 @@ public class StudyMaterialService {
         material.setOwner(resolveCurrentUser());
         material.setCreatedAt(User.formatNow());
         material.setDeleted(false);
+        material.setCertification(resolveCertificationForTopicOrFallback(topic.getId()));
+        material.setArea(resolveAreaForTopic(topic.getId()));
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -269,6 +322,8 @@ public class StudyMaterialService {
         material.setOwner(resolveCurrentUser());
         material.setCreatedAt(User.formatNow());
         material.setDeleted(false);
+        material.setCertification(resolveCertificationForTopicOrFallback(topic.getId()));
+        material.setArea(resolveAreaForTopic(topic.getId()));
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -322,6 +377,8 @@ public class StudyMaterialService {
         material.setOwner(resolveCurrentUser());
         material.setCreatedAt(User.formatNow());
         material.setDeleted(false);
+        material.setCertification(resolveCertificationForTopicOrFallback(topic.getId()));
+        material.setArea(resolveAreaForTopic(topic.getId()));
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -376,6 +433,8 @@ public class StudyMaterialService {
         material.setOwner(resolveCurrentUser());
         material.setCreatedAt(User.formatNow());
         material.setDeleted(false);
+        material.setCertification(resolveCertificationForTopicOrFallback(topic.getId()));
+        material.setArea(resolveAreaForTopic(topic.getId()));
 
         return enrichMaterial(studyMaterialRepository.save(material));
     }
@@ -394,22 +453,32 @@ public class StudyMaterialService {
         material.setOwner(resolveCurrentUser());
         material.setCreatedAt(User.formatNow());
         material.setDeleted(false);
+        material.setCertification(resolveCertificationForTopicOrFallback(topicId));
+        material.setArea(resolveAreaForTopic(topicId));
         return enrichMaterial(studyMaterialRepository.save(material));
     }
 
     private StudyMaterial enrichMaterial(StudyMaterial m) {
         if (m != null && m.getId() != null) {
-            m.setLinkedQuestionsCount(questionRepository.countByMaterialIdAndVerifiedTrue(m.getId()));
             Long currentUserId = resolveCurrentUser().getId();
+            return enrichMaterial(m, currentUserId);
+        }
+        return m;
+    }
+
+    private StudyMaterial enrichMaterial(StudyMaterial m, Long currentUserId) {
+        if (m != null && m.getId() != null) {
+            m.setLinkedQuestionsCount(questionRepository.countByMaterialIdAndVerifiedTrue(m.getId()));
             m.setCommentsCount(studyCardCommentRepository.countByMaterialIdAndUser_Id(m.getId(), currentUserId));
         }
         return m;
     }
 
     private List<StudyMaterial> enrichMaterials(List<StudyMaterial> list) {
-        if (list != null) {
+        if (list != null && !list.isEmpty()) {
+            Long currentUserId = resolveCurrentUser().getId();
             for (StudyMaterial m : list) {
-                enrichMaterial(m);
+                enrichMaterial(m, currentUserId);
             }
         }
         return list;
@@ -417,19 +486,41 @@ public class StudyMaterialService {
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> getMaterialsByTopic(Long topicId) {
+        Long certId = resolveCertId(null);
+        if (certId != null) {
+            return enrichMaterials(studyMaterialRepository.findByCertificationIdAndAreaId(certId, topicId));
+        }
         return enrichMaterials(studyMaterialRepository.findByTopicId(topicId));
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> searchMaterials(String query) {
+        return searchMaterials(query, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StudyMaterial> searchMaterials(String query, Long explicitCertId) {
+        Long certId = resolveCertId(explicitCertId);
         if (query == null || query.trim().isEmpty()) {
-            return enrichMaterials(studyMaterialRepository.findAllActive());
+            return getAllMaterials(certId);
+        }
+        if (certId != null) {
+            return enrichMaterials(studyMaterialRepository.searchMaterialsByCertificationId(query.trim(), certId));
         }
         return enrichMaterials(studyMaterialRepository.searchMaterials(query.trim()));
     }
 
     @Transactional(readOnly = true)
     public List<StudyMaterial> getAllMaterials() {
+        return getAllMaterials(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StudyMaterial> getAllMaterials(Long explicitCertId) {
+        Long certId = resolveCertId(explicitCertId);
+        if (certId != null) {
+            return enrichMaterials(studyMaterialRepository.findAllActiveByCertificationId(certId));
+        }
         return enrichMaterials(studyMaterialRepository.findAllActive());
     }
 
@@ -725,6 +816,16 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
         Question q = new Question();
         q.setMaterial(material);
         q.setTopic(topic);
+        if (material != null && material.getCertification() != null) {
+            q.setCertification(material.getCertification());
+        } else {
+            q.setCertification(resolveCertificationForTopicOrFallback(topic != null ? topic.getId() : null));
+        }
+        if (material != null && material.getArea() != null) {
+            q.setArea(material.getArea());
+        } else {
+            q.setArea(resolveAreaForTopic(topic != null ? topic.getId() : null));
+        }
         q.setSource("MANUAL");
         q.setQuestionType("SINGLE_CHOICE");
         q.setDifficulty(2);
@@ -807,6 +908,8 @@ Frase de la página: puede ser *"más adecuado para el intercambio entre organiz
         Question q = new Question();
         q.setMaterial(material);
         q.setTopic(material.getTopic());
+        q.setCertification(material.getCertification() != null ? material.getCertification() : resolveCertificationForTopicOrFallback(material.getTopic() != null ? material.getTopic().getId() : null));
+        q.setArea(material.getArea() != null ? material.getArea() : resolveAreaForTopic(material.getTopic() != null ? material.getTopic().getId() : null));
         q.setOwner(resolveCurrentUser());
         q.setCreatedAt(User.formatNow());
         q.setDeleted(false);

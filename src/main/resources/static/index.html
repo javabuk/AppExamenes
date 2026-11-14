@@ -19,6 +19,15 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            color-scheme: dark;
+        }
+        select,
+        select option,
+        select optgroup {
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
         body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             letter-spacing: -0.011em;
@@ -528,7 +537,7 @@
             <div>
                 <h1 class="text-base md:text-lg font-bold text-white tracking-tight flex items-center gap-2">
                     FHIR Cert Master
-                    <span class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full font-mono font-medium">HAPI FHIR R4</span>
+                    <span id="header-current-standard-badge" class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full font-mono font-medium">HAPI FHIR R4</span>
                 </h1>
                 <p class="text-xs text-slate-400">Plataforma Inteligente de Certificación HL7 FHIR</p>
             </div>
@@ -541,6 +550,26 @@
             <button onclick="loadDashboard()" class="px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-300 border border-slate-700/80 transition cursor-pointer">
                 ↻ Actualizar
             </button>
+
+            <!-- Certification Selector Widget -->
+            <div id="header-certification-widget" class="relative flex items-center gap-2 pl-2 sm:border-l border-slate-800">
+                <button id="header-cert-trigger" type="button" onclick="toggleHeaderCertMenu(event)"
+                    class="flex items-center gap-2 bg-slate-950/80 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-1.5 transition cursor-pointer text-left">
+                    <span id="header-cert-icon" class="text-base select-none">🧬</span>
+                    <div class="leading-tight">
+                        <div class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Certificación</div>
+                        <div class="flex items-center gap-1.5">
+                            <span id="header-cert-badge" class="text-xs font-bold text-white whitespace-nowrap">-</span>
+                            <svg id="header-cert-chevron" class="w-3.5 h-3.5 text-slate-400 hidden transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </button>
+                <div id="header-cert-menu" class="hidden absolute right-0 top-full mt-2 w-72 bg-slate-900/95 backdrop-blur-xl border border-slate-700/90 rounded-xl shadow-2xl p-1.5 z-50">
+                    <!-- Poblado dinámicamente -->
+                </div>
+            </div>
 
             <!-- User Session Widget -->
             <div id="header-user-widget" class="flex items-center gap-2 pl-2 sm:border-l border-slate-800">
@@ -607,6 +636,9 @@
                 </div>
                 <button onclick="switchTab('admin-users')" id="btn-tab-admin-users" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                     <span>👥</span> Usuarios
+                </button>
+                <button onclick="switchTab('admin-certifications')" id="btn-tab-admin-certifications" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
+                    <span>📜</span> Certificaciones
                 </button>
                 <button onclick="switchTab('admin-results')" id="btn-tab-admin-results" class="tab-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-left text-slate-300 hover:bg-slate-800/60 hover:text-white cursor-pointer">
                     <span>📈</span> Resultados por Usuario
@@ -1741,6 +1773,51 @@
             </section>
 
             <!-- ======================================================================= -->
+            <!-- SECTION: ADMIN — GESTIÓN DE CERTIFICACIONES Y SYLLABUS                  -->
+            <!-- ======================================================================= -->
+            <section id="view-admin-certifications" class="hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>📜</span> Catálogo de Certificaciones y Syllabus
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Gestión de certificaciones soportadas, parámetros de examen, enlaces a la especificación y pesos temáticos configurables</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openCreateCertificationModal()" class="px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg shadow-blue-600/25 flex items-center gap-2 cursor-pointer">
+                            <span>＋ Nueva Certificación</span>
+                        </button>
+                        <button onclick="loadAdminCertifications()" class="px-3.5 py-2.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer">
+                            ↻ Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabla de Certificaciones -->
+                <div class="bg-slate-800/80 rounded-2xl border border-slate-700/80 overflow-hidden shadow-md">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="uppercase bg-slate-900/70 text-slate-400 border-b border-slate-700 text-[11px]">
+                                <tr>
+                                    <th class="py-3 px-4">Certificación</th>
+                                    <th class="py-3 px-4 text-center">Versión</th>
+                                    <th class="py-3 px-4 text-center">Parámetros Examen</th>
+                                    <th class="py-3 px-4 text-center">Corte</th>
+                                    <th class="py-3 px-4 text-center">Áreas Syllabus</th>
+                                    <th class="py-3 px-4 text-center">Preguntas / Usuarios</th>
+                                    <th class="py-3 px-4 text-center">Estado</th>
+                                    <th class="py-3 px-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-certifications-table-body" class="divide-y divide-slate-700/60">
+                                <tr><td colspan="8" class="py-6 text-center text-slate-500">Cargando certificaciones...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================================= -->
             <!-- SECTION: ADMIN — RESULTADOS Y TRAZABILIDAD POR USUARIO                  -->
             <!-- ======================================================================= -->
             <section id="view-admin-results" class="hidden space-y-6">
@@ -2730,6 +2807,12 @@
                         <option value="ADMIN">ADMIN (Gestión Global y Trazabilidad)</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Certificaciones Asignadas:</label>
+                    <div id="admin-user-certifications-checkboxes" class="space-y-1.5 max-h-36 overflow-y-auto bg-slate-950 p-2.5 rounded-xl border border-slate-700">
+                        <span class="text-slate-500 text-[11px]">Cargando certificaciones...</span>
+                    </div>
+                </div>
                 <div id="admin-form-password-group">
                     <label class="block text-slate-300 font-semibold mb-1">Contraseña Inicial (Opcional, mín. 10 caracteres):</label>
                     <input id="admin-form-password" type="text" placeholder="Dejar vacío para autogenerar contraseña temporal segura" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500">
@@ -2852,10 +2935,203 @@
         </div>
     </div>
 
+    <!-- Modal: Crear / Editar Certificación (Solo ADMIN) -->
+    <div id="modal-admin-cert-form" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <h3 id="admin-cert-modal-title" class="text-base font-bold text-white flex items-center gap-2">
+                    <span>📜</span> Crear Nueva Certificación
+                </h3>
+                <button type="button" onclick="closeModal('modal-admin-cert-form')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+
+            <form id="admin-cert-form" onsubmit="submitAdminCertForm(event)" class="flex-1 overflow-y-auto space-y-3 text-xs pr-1">
+                <input id="admin-cert-id" type="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Código Único (Ej: FHIR_R4, FHIR_R5):</label>
+                        <input id="admin-cert-code" type="text" required placeholder="FHIR_R5" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono uppercase focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Versión del Estándar:</label>
+                        <select id="admin-cert-version" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                            <option value="R4">HL7 FHIR R4</option>
+                            <option value="R5">HL7 FHIR R5</option>
+                            <option value="V2">HL7 v2.x</option>
+                            <option value="CDA">HL7 CDA / C-CDA</option>
+                            <option value="OTHER">Otro Estándar</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Nombre Descriptivo:</label>
+                    <input id="admin-cert-name" type="text" required placeholder="HL7 FHIR R5 Proficiency" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Descripción del Programa:</label>
+                    <textarea id="admin-cert-desc" rows="2" placeholder="Preparación integral para la certificación oficial HL7 FHIR Release 5." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500"></textarea>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Preguntas Examen:</label>
+                        <input id="admin-cert-questions" type="number" min="1" max="200" required value="50" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Duración (min):</label>
+                        <input id="admin-cert-duration" type="number" min="1" max="300" required value="90" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Nota Corte (%):</label>
+                        <input id="admin-cert-pass-score" type="number" min="1" max="100" step="0.5" required value="70.0" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">URL Base de la Especificación Oficial:</label>
+                    <input id="admin-cert-spec-url" type="url" placeholder="https://hl7.org/fhir/R5/" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none focus:border-blue-500">
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Emoji / Icono:</label>
+                        <input id="admin-cert-icon" type="text" value="🧬" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-center focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Color Identificador:</label>
+                        <input id="admin-cert-color" type="color" value="#3b82f6" class="w-full h-9 bg-slate-950 border border-slate-700 rounded-xl p-1 cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">Orden de Presentación:</label>
+                        <input id="admin-cert-sort" type="number" min="1" value="1" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1.5">Módulos Habilitados (Feature Flags):</label>
+                    <div class="grid grid-cols-2 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-700 text-[11px]">
+                        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+                            <input id="admin-flag-exam" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                            <span>📝 Motor de Examen</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+                            <input id="admin-flag-flashcards" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                            <span>⚡ Fichas SRS (SM-2)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+                            <input id="admin-flag-materials" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                            <span>📑 Materiales & PDFBox</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+                            <input id="admin-flag-search" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                            <span>🔍 FHIR Search Builder</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+                            <input id="admin-flag-validator" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                            <span>🔬 Validador HAPI FHIR</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <input id="admin-cert-active" type="checkbox" checked class="rounded bg-slate-800 border-slate-600 text-blue-600">
+                    <label for="admin-cert-active" class="text-slate-300 font-semibold cursor-pointer">Certificación Activa (disponible para asignación y estudio)</label>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800 shrink-0">
+                    <button type="button" onclick="closeModal('modal-admin-cert-form')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer shadow-md shadow-blue-600/25">
+                        Guardar Certificación
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Gestión de Áreas del Syllabus (Solo ADMIN) -->
+    <div id="modal-admin-cert-areas" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-3xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl modal-box">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div>
+                    <h3 id="admin-areas-modal-title" class="text-base font-bold text-white flex items-center gap-2">
+                        <span>🎯</span> Áreas del Syllabus Oficial
+                    </h3>
+                    <p id="admin-areas-modal-subtitle" class="text-xs text-slate-400 mt-0.5">Configuración de pesos ponderados (%) y distribución temático-oficial</p>
+                </div>
+                <button type="button" onclick="closeModal('modal-admin-cert-areas')" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+            </div>
+
+            <!-- Total Weight Progress Indicator -->
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs shrink-0">
+                <div>
+                    <span class="text-slate-400">Suma total de pesos configurados:</span>
+                    <span id="admin-areas-weight-total" class="font-mono font-bold text-emerald-400 ml-1.5 text-sm">100.0%</span>
+                </div>
+                <span id="admin-areas-weight-status" class="text-[11px] font-semibold text-emerald-400">✓ Balance oficial correcto (100%)</span>
+            </div>
+
+            <!-- Areas List Table -->
+            <div class="flex-1 overflow-y-auto pr-1">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="uppercase bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px]">
+                        <tr>
+                            <th class="py-2.5 px-3">Orden</th>
+                            <th class="py-2.5 px-3">Código</th>
+                            <th class="py-2.5 px-3">Nombre del Área</th>
+                            <th class="py-2.5 px-3 text-center">Peso (%)</th>
+                            <th class="py-2.5 px-3 text-center">Preguntas</th>
+                            <th class="py-2.5 px-3 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-areas-table-body" class="divide-y divide-slate-800">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Form to Add/Edit Area -->
+            <form id="admin-area-edit-form" onsubmit="submitAdminAreaForm(event)" class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2 text-xs shrink-0">
+                <input id="admin-area-id" type="hidden">
+                <div class="font-bold text-slate-300" id="admin-area-form-heading">Añadir Nueva Área al Syllabus:</div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <div>
+                        <input id="admin-area-code" type="text" required placeholder="CÓDIGO (Ej: FOUNDATIONS)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono uppercase text-xs">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <input id="admin-area-name" type="text" required placeholder="Nombre descriptivo del área" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs">
+                    </div>
+                    <div>
+                        <input id="admin-area-weight" type="number" min="0" max="100" step="0.5" required placeholder="Peso %" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-1">
+                    <button type="button" id="btn-cancel-area-edit" onclick="resetAdminAreaForm()" class="hidden text-[11px] text-slate-400 hover:text-white underline cursor-pointer">
+                        Cancelar edición
+                    </button>
+                    <div class="ml-auto">
+                        <button type="submit" id="btn-submit-area-form" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer">
+                            ＋ Guardar Área
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="flex justify-end pt-2 border-t border-slate-800 shrink-0">
+                <button type="button" onclick="closeModal('modal-admin-cert-areas')" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications Container -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 md:px-0"></div>
 
     <!-- App Logic Script -->
-    <script src="/app.js?v=3.1.0"></script>
+    <script src="/app.js?v=3.2.0"></script>
 </body>
 </html>

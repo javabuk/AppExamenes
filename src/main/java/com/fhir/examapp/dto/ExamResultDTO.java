@@ -12,7 +12,10 @@ public class ExamResultDTO {
     private Integer correctCount;
     private Integer totalCount;
     private Integer totalTimeSeconds;
-    private Boolean passed; // >= 80% (umbral seguro HL7 FHIR)
+    private Boolean passed; // >= passingScorePercent de la certificación
+    private Long certificationId;
+    private String certificationCode;
+    private Double passingScorePercent;
     private List<QuestionReviewDTO> reviews;
 
     public ExamResultDTO() {}
@@ -43,6 +46,15 @@ public class ExamResultDTO {
 
     public Boolean getPassed() { return passed; }
     public void setPassed(Boolean passed) { this.passed = passed; }
+
+    public Long getCertificationId() { return certificationId; }
+    public void setCertificationId(Long certificationId) { this.certificationId = certificationId; }
+
+    public String getCertificationCode() { return certificationCode; }
+    public void setCertificationCode(String certificationCode) { this.certificationCode = certificationCode; }
+
+    public Double getPassingScorePercent() { return passingScorePercent; }
+    public void setPassingScorePercent(Double passingScorePercent) { this.passingScorePercent = passingScorePercent; }
 
     public List<QuestionReviewDTO> getReviews() { return reviews; }
     public void setReviews(List<QuestionReviewDTO> reviews) { this.reviews = reviews; }

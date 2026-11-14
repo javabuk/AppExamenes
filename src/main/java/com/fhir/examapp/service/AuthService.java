@@ -1,15 +1,23 @@
 package com.fhir.examapp.service;
 
+import com.fhir.examapp.domain.Certification;
+import com.fhir.examapp.domain.Role;
 import com.fhir.examapp.domain.User;
+import com.fhir.examapp.domain.UserCertification;
 import com.fhir.examapp.dto.AuthUserDTO;
 import com.fhir.examapp.dto.ChangePasswordRequest;
 import com.fhir.examapp.dto.LoginRequest;
+import com.fhir.examapp.dto.UserCertificationSummaryDTO;
+import com.fhir.examapp.repository.CertificationRepository;
+import com.fhir.examapp.repository.UserCertificationRepository;
 import com.fhir.examapp.repository.UserRepository;
+import com.fhir.examapp.security.CertificationContextHelper;
 import com.fhir.examapp.security.CustomUserDetails;
 import com.fhir.examapp.security.SecurityContextHelper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
@@ -32,6 +40,18 @@ public class AuthService {
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+    private UserCertificationRepository userCertificationRepository;
+    private CertificationRepository certificationRepository;
+    private CertificationContextHelper certificationContextHelper;
+
+    @Autowired
+    public void setCertificationComponents(@Autowired(required = false) UserCertificationRepository userCertificationRepository,
+                                          @Autowired(required = false) CertificationRepository certificationRepository,
+                                          @Autowired(required = false) CertificationContextHelper certificationContextHelper) {
+        this.userCertificationRepository = userCertificationRepository;
+        this.certificationRepository = certificationRepository;
+        this.certificationContextHelper = certificationContextHelper;
+    }
 
     @Value("${app.security.max-failed-attempts:5}")
     private int maxFailedAttempts;
@@ -129,7 +149,7 @@ public class AuthService {
                 "LOGIN_SUCCESS", "USER", String.valueOf(user.getId()),
                 "Inicio de sesión exitoso", clientIp);
 
-        return AuthUserDTO.fromEntity(user);
+        return enrichAuthUserDto(AuthUserDTO.fromEntity(user), user);
     }
 
     @Transactional
@@ -154,7 +174,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthUserDTO getCurrentUserDto() {
         User user = securityContextHelper.getCurrentUser();
-        return AuthUserDTO.fromEntity(user);
+        return enrichAuthUserDto(AuthUserDTO.fromEntity(user), user);
     }
 
     @Transactional
@@ -198,7 +218,52 @@ public class AuthService {
                 "PASSWORD_CHANGED", "USER", String.valueOf(user.getId()),
                 "Contraseña actualizada correctamente por el usuario", clientIp);
 
-        return AuthUserDTO.fromEntity(user);
+        return enrichAuthUserDto(AuthUserDTO.fromEntity(user), user);
+    }
+
+    private AuthUserDTO enrichAuthUserDto(AuthUserDTO dto, User user) {
+        if (dto == null || user == null) return dto;
+        if (userCertificationRepository != null) {
+            java.util.List<UserCertification> userCerts = userCertificationRepository.findByUserIdAndActiveTrue(user.getId());
+            java.util.List<UserCertificationSummaryDTO> certSummaries = new java.util.ArrayList<>();
+            for (UserCertification uc : userCerts) {
+                UserCertificationSummaryDTO s = UserCertificationSummaryDTO.from(uc);
+                if (s != null) certSummaries.add(s);
+            }
+
+            // Si es ADMIN, asegurar que puede acceder a todas las certificaciones activas
+            if (user.getRole() == Role.ADMIN && certificationRepository != null) {
+                java.util.List<Certification> allActive = certificationRepository.findByActiveTrueOrderBySortOrderAsc();
+                for (Certification c : allActive) {
+                    boolean alreadyPresent = certSummaries.stream().anyMatch(s -> s.getCertificationId().equals(c.getId()));
+                    if (!alreadyPresent) {
+                        certSummaries.add(UserCertificationSummaryDTO.from(c));
+                    }
+                }
+            }
+
+            dto.setCertifications(certSummaries);
+            if (!certSummaries.isEmpty()) {
+                UserCertificationSummaryDTO activeCert = certSummaries.get(0);
+                if (certificationContextHelper != null) {
+                    try {
+                        Certification resolved = certificationContextHelper.resolveActiveCertification();
+                        if (resolved != null) {
+                            for (UserCertificationSummaryDTO s : certSummaries) {
+                                if (s.getCertificationId().equals(resolved.getId())) {
+                                    activeCert = s;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                dto.setActiveCertificationId(activeCert.getCertificationId());
+                dto.setActiveCertificationCode(activeCert.getCode());
+                dto.setActiveCertificationName(activeCert.getName());
+            }
+        }
+        return dto;
     }
 
     public static String extractClientIp(HttpServletRequest request) {

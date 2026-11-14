@@ -22,6 +22,8 @@ public class AdminUserCreateRequest {
 
     private String password;
 
+    private java.util.List<Long> certificationIds;
+
     public AdminUserCreateRequest() {
     }
 
@@ -39,4 +41,7 @@ public class AdminUserCreateRequest {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public java.util.List<Long> getCertificationIds() { return certificationIds; }
+    public void setCertificationIds(java.util.List<Long> certificationIds) { this.certificationIds = certificationIds; }
 }

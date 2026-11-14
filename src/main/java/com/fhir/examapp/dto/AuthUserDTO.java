@@ -14,6 +14,10 @@ public class AuthUserDTO {
     private Boolean mustChangePassword;
     private String lastLoginAt;
     private String createdAt;
+    private java.util.List<UserCertificationSummaryDTO> certifications;
+    private Long activeCertificationId;
+    private String activeCertificationCode;
+    private String activeCertificationName;
 
     public AuthUserDTO() {}
 
@@ -58,4 +62,16 @@ public class AuthUserDTO {
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    public java.util.List<UserCertificationSummaryDTO> getCertifications() { return certifications; }
+    public void setCertifications(java.util.List<UserCertificationSummaryDTO> certifications) { this.certifications = certifications; }
+
+    public Long getActiveCertificationId() { return activeCertificationId; }
+    public void setActiveCertificationId(Long activeCertificationId) { this.activeCertificationId = activeCertificationId; }
+
+    public String getActiveCertificationCode() { return activeCertificationCode; }
+    public void setActiveCertificationCode(String activeCertificationCode) { this.activeCertificationCode = activeCertificationCode; }
+
+    public String getActiveCertificationName() { return activeCertificationName; }
+    public void setActiveCertificationName(String activeCertificationName) { this.activeCertificationName = activeCertificationName; }
 }
